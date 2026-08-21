@@ -12,14 +12,14 @@ export default function DoorAboutOverlay({
   currentFrame,
   onOpenJoinModal,
 }: DoorAboutOverlayProps) {
-  // Active window: frames 365 to 395, fully visible from 370 to 390
+  // Active window: frames 360 to 402, fully visible from 368 to 395
   let opacity = 0;
-  if (currentFrame >= 365 && currentFrame < 370) {
-    opacity = (currentFrame - 365) / 5;
-  } else if (currentFrame >= 370 && currentFrame <= 390) {
+  if (currentFrame >= 360 && currentFrame < 368) {
+    opacity = (currentFrame - 360) / 8;
+  } else if (currentFrame >= 368 && currentFrame <= 395) {
     opacity = 1;
-  } else if (currentFrame > 390 && currentFrame <= 395) {
-    opacity = 1 - (currentFrame - 390) / 5;
+  } else if (currentFrame > 395 && currentFrame <= 402) {
+    opacity = 1 - (currentFrame - 395) / 7;
   }
 
   if (opacity <= 0.01) return null;

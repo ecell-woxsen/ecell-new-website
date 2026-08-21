@@ -15,7 +15,47 @@ interface ScrollytellingEngineProps {
 
 const TOTAL_FRAMES = 1041;
 const CRITICAL_PRELOAD_COUNT = 60;
-const SCROLL_SENSITIVITY = 0.55;
+
+// Dynamic Non-Linear Scroll Sensitivity Curve
+const getDynamicSensitivity = (frame: number): number => {
+  // Act 1 Fast Glider: Campus approach (Frames 1 - 345)
+  if (frame < 345) {
+    return 0.75;
+  }
+  // Deceleration into Door Threshold (Frames 345 - 368)
+  if (frame >= 345 && frame < 368) {
+    const t = (frame - 345) / 23;
+    return 0.75 - t * 0.65; // smoothly drops to 0.10
+  }
+  // Milestone 1 Reading Zone: Door Scene (Frames 368 - 395) -> Slow, smooth & readable
+  if (frame >= 368 && frame <= 395) {
+    return 0.10;
+  }
+  // Acceleration out of Door into Boardroom (Frames 395 - 430)
+  if (frame > 395 && frame <= 430) {
+    const t = (frame - 395) / 35;
+    return 0.10 + t * 0.65; // smoothly rises back to 0.75
+  }
+  // Act 2 Fast Glider: Boardroom Traversal (Frames 430 - 580)
+  if (frame > 430 && frame < 580) {
+    return 0.75;
+  }
+  // Deceleration into Concrete Wall (Frames 580 - 605)
+  if (frame >= 580 && frame <= 605) {
+    const t = (frame - 580) / 25;
+    return 0.75 - t * 0.57; // smoothly drops to 0.18
+  }
+  // Milestone 2 Reading Zone: Extended Concrete Gallery Wall (Frames 605 - 1041) -> Slow & smooth
+  return 0.18;
+};
+
+// Dynamic Lerp Damping factor (Lower = smoother & more cinematic)
+const getDynamicLerpFactor = (frame: number): number => {
+  if ((frame >= 365 && frame <= 398) || frame >= 600) {
+    return 0.085; // Extra smooth, luxurious deceleration for reading sections
+  }
+  return 0.16; // Snappy, responsive glide for transit sections
+};
 
 export default function ScrollytellingEngine({
   onFrameUpdate,
@@ -227,16 +267,18 @@ export default function ScrollytellingEngine({
     }
   }, [targetNavigationFrame, onNavigationComplete, preloadPriorityWindow]);
 
-  // Virtual Scroll Engine: Y-Axis Scroll Lock with wheel & touch handlers
+  // Non-Linear Virtual Scroll Engine
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
 
-      // Normalize delta
-      const delta = e.deltaY;
+      const currentTarget = targetFrameRef.current;
+      const sensitivity = getDynamicSensitivity(currentTarget);
+      const delta = e.deltaY * sensitivity;
+
       const newTarget = Math.max(
         1,
-        Math.min(TOTAL_FRAMES, targetFrameRef.current + delta * SCROLL_SENSITIVITY)
+        Math.min(TOTAL_FRAMES, currentTarget + delta)
       );
 
       targetFrameRef.current = newTarget;
@@ -260,9 +302,13 @@ export default function ScrollytellingEngine({
         const deltaY = touchStartYRef.current - currentY;
         touchStartYRef.current = currentY;
 
+        const currentTarget = targetFrameRef.current;
+        const sensitivity = getDynamicSensitivity(currentTarget) * 1.5;
+        const delta = deltaY * sensitivity;
+
         const newTarget = Math.max(
           1,
-          Math.min(TOTAL_FRAMES, targetFrameRef.current + deltaY * (SCROLL_SENSITIVITY * 1.5))
+          Math.min(TOTAL_FRAMES, currentTarget + delta)
         );
 
         targetFrameRef.current = newTarget;
@@ -274,18 +320,22 @@ export default function ScrollytellingEngine({
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      let delta = 0;
+      let step = 0;
+      const currentTarget = targetFrameRef.current;
+      const isSlowZone = (currentTarget >= 365 && currentTarget <= 395) || currentTarget >= 600;
+      const deltaMagnitude = isSlowZone ? 12 : 35;
+
       if (e.key === "ArrowDown" || e.key === "PageDown" || e.key === " ") {
-        delta = 40;
+        step = deltaMagnitude;
       } else if (e.key === "ArrowUp" || e.key === "PageUp") {
-        delta = -40;
+        step = -deltaMagnitude;
       }
 
-      if (delta !== 0) {
+      if (step !== 0) {
         e.preventDefault();
         const newTarget = Math.max(
           1,
-          Math.min(TOTAL_FRAMES, targetFrameRef.current + delta)
+          Math.min(TOTAL_FRAMES, currentTarget + step)
         );
         targetFrameRef.current = newTarget;
         preloadPriorityWindow(Math.round(newTarget));
@@ -308,15 +358,17 @@ export default function ScrollytellingEngine({
     };
   }, [preloadPriorityWindow]);
 
-  // 60 FPS Linear Interpolation (Lerp) Animation Loop
+  // 60 FPS Adaptive Linear Interpolation (Lerp) Animation Loop
   useEffect(() => {
     const renderLoop = () => {
       const target = targetFrameRef.current;
       const current = currentFrameRef.current;
       const diff = target - current;
 
+      const lerpFactor = getDynamicLerpFactor(current);
+
       if (Math.abs(diff) > 0.001) {
-        currentFrameRef.current += diff * 0.15;
+        currentFrameRef.current += diff * lerpFactor;
       } else {
         currentFrameRef.current = target;
       }
