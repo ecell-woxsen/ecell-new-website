@@ -407,9 +407,9 @@ export default function ScrollytellingEngine({
     return () => window.removeEventListener("resize", handleResize);
   }, [drawFrameToCanvas]);
 
-  const handleBeginJourney = () => {
-    targetFrameRef.current = 375;
-    preloadPriorityWindow(375);
+  const handleExploreEvents = () => {
+    targetFrameRef.current = 630;
+    preloadPriorityWindow(630);
   };
 
   return (
@@ -452,7 +452,8 @@ export default function ScrollytellingEngine({
         {/* Overlay 1: Hero Landing (Frames 1 - 35) */}
         <HeroOverlay
           currentFrame={currentFrame}
-          onExploreClick={handleBeginJourney}
+          onExploreClick={handleExploreEvents}
+          onOpenJoinModal={onOpenJoinModal}
         />
 
         {/* Overlay 2: Door About Us (Frames 370 - 390) */}

@@ -1,90 +1,71 @@
 "use client";
 
 import React from "react";
-import { ChevronDown, Sparkles, Rocket, ShieldCheck, Layers } from "lucide-react";
 
 interface HeroOverlayProps {
   currentFrame: number;
   onExploreClick: () => void;
+  onOpenJoinModal?: () => void;
 }
 
 export default function HeroOverlay({
   currentFrame,
   onExploreClick,
+  onOpenJoinModal,
 }: HeroOverlayProps) {
-  // Smoothly fade out from frame 1 to frame 40
-  const opacity = Math.max(0, 1 - (currentFrame - 1) / 35);
-  const translateY = (currentFrame - 1) * 2.5;
+  // Smoothly fade out from frame 1 to frame 35
+  const opacity = Math.max(0, 1 - (currentFrame - 1) / 32);
+  const translateY = (currentFrame - 1) * 2;
 
   if (opacity <= 0.01) return null;
 
   return (
     <div
-      className="fixed inset-0 z-20 flex flex-col justify-between items-center p-6 sm:p-12 pointer-events-none transition-opacity duration-300"
+      className="fixed inset-0 z-20 flex flex-col justify-center items-center px-4 sm:px-8 text-center pointer-events-none transition-opacity duration-300"
       style={{
         opacity,
         transform: `translateY(-${translateY}px)`,
       }}
     >
-      {/* Top spacer for navbar */}
-      <div className="h-16" />
+      <div className="max-w-5xl mx-auto flex flex-col items-center pointer-events-auto">
+        {/* Eyebrow / Kicker in Space Mono */}
+        <p className="font-mono text-[11px] sm:text-xs md:text-sm font-medium tracking-[0.25em] text-slate-300 uppercase mb-3 sm:mb-4 select-none">
+          ENTREPRENEURSHIP CELL · WOXSEN UNIVERSITY
+        </p>
 
-      {/* Center Hero Content */}
-      <div className="max-w-4xl mx-auto text-center flex flex-col items-center gap-6 pointer-events-auto">
-        {/* Glowing Badge */}
-        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-slate-900/80 border border-emerald-500/30 backdrop-blur-xl shadow-lg shadow-emerald-950/30 animate-in fade-in slide-in-from-bottom-3 duration-700">
-          <Sparkles className="w-4 h-4 text-emerald-400" />
-          <span className="text-xs sm:text-sm font-mono tracking-wider font-semibold text-emerald-300">
-            OFFICIAL ENTREPRENEURSHIP CELL · WOXSEN UNIVERSITY
+        {/* Main Display Headline on a Single Baseline-Aligned Line */}
+        <h1 className="font-display flex items-baseline justify-center whitespace-nowrap select-none mb-4 sm:mb-6 uppercase leading-none">
+          <span className="text-5xl sm:text-7xl md:text-8xl lg:text-[7rem] font-bold text-white tracking-wide">
+            WHERE
           </span>
-        </div>
+          <span className="text-6xl sm:text-8xl md:text-9xl lg:text-[8.8rem] font-bold text-[#22c55e] tracking-wide mx-2.5 sm:mx-4 inline-block">
+            BUILDERS
+          </span>
+          <span className="text-5xl sm:text-7xl md:text-8xl lg:text-[7rem] font-bold text-white tracking-wide">
+            START.
+          </span>
+        </h1>
 
-        {/* Main Headings */}
-        <div className="space-y-3">
-          <h1 className="text-4xl sm:text-6xl md:text-7xl font-extrabold font-heading tracking-tight leading-[1.08] text-white">
-            Where Innovation Meets{" "}
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-300 to-sky-400">
-              Initiative.
-            </span>
-          </h1>
-          <p className="max-w-2xl mx-auto text-base sm:text-lg md:text-xl text-slate-200/90 font-normal leading-relaxed">
-            A dynamic student-led movement dedicated to transforming campus ambition into scalable ventures, breakthrough ideas, and impactful leadership.
-          </p>
-        </div>
+        {/* Subtitle Description in DM Sans */}
+        <p className="font-body max-w-2xl text-xs sm:text-sm md:text-base text-slate-300 font-normal leading-relaxed mb-8 px-4">
+          The Entrepreneurship Cell of Woxsen University. We build founders, not just businesses — through hands-on programs, mentorship, and a network that ships.
+        </p>
 
-        {/* Value Chips */}
-        <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-          <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-slate-950/60 border border-white/10 backdrop-blur-md text-xs font-medium text-slate-300">
-            <Rocket className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Grassroots Innovation</span>
-          </div>
-          <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-slate-950/60 border border-white/10 backdrop-blur-md text-xs font-medium text-slate-300">
-            <Layers className="w-3.5 h-3.5 text-teal-400" />
-            <span>6+ Interdisciplinary Schools</span>
-          </div>
-          <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-slate-950/60 border border-white/10 backdrop-blur-md text-xs font-medium text-slate-300">
-            <ShieldCheck className="w-3.5 h-3.5 text-sky-400" />
-            <span>Founded July 2025</span>
-          </div>
-        </div>
+        {/* Action Buttons in Space Mono */}
+        <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 font-mono">
+          <button
+            onClick={onExploreClick}
+            className="px-7 py-3 rounded-full bg-[#16a34a] hover:bg-[#22c55e] text-white text-xs sm:text-sm font-bold tracking-wider uppercase shadow-lg shadow-emerald-950/40 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+          >
+            EXPLORE EVENTS
+          </button>
 
-        {/* Explore Button */}
-        <button
-          onClick={onExploreClick}
-          className="mt-2 px-8 py-3.5 rounded-full bg-white text-slate-950 font-bold text-sm tracking-wide shadow-2xl hover:bg-slate-100 hover:scale-105 active:scale-95 transition-all duration-300 cursor-pointer pointer-events-auto flex items-center gap-2"
-        >
-          <span>Begin Journey</span>
-          <ChevronDown className="w-4 h-4 text-slate-950 animate-bounce" />
-        </button>
-      </div>
-
-      {/* Bottom Scroll Prompt */}
-      <div className="flex flex-col items-center gap-2 pointer-events-auto">
-        <span className="text-[11px] font-mono tracking-widest uppercase text-slate-400">
-          Scroll down to enter the hub
-        </span>
-        <div className="w-5 h-9 rounded-full border-2 border-white/20 flex justify-center p-1 backdrop-blur-sm">
-          <div className="w-1 h-2 bg-emerald-400 rounded-full animate-bounce" />
+          <button
+            onClick={onOpenJoinModal}
+            className="px-7 py-3 rounded-full bg-black/40 hover:bg-black/60 text-slate-200 hover:text-white text-xs sm:text-sm font-bold tracking-wider uppercase border border-white/20 hover:border-white/40 backdrop-blur-md transition-all hover:scale-105 active:scale-95 cursor-pointer"
+          >
+            SUBMIT YOUR IDEA
+          </button>
         </div>
       </div>
     </div>

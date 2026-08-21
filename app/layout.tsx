@@ -1,43 +1,49 @@
 import type { Metadata } from "next";
-import { Outfit, Plus_Jakarta_Sans } from "next/font/google";
+import { Bebas_Neue, DM_Sans, Space_Mono } from "next/font/google";
 import "./globals.css";
 
-const outfit = Outfit({
-  variable: "--font-outfit",
+const bebasNeue = Bebas_Neue({
+  weight: "400",
+  variable: "--font-bebas",
   subsets: ["latin"],
   display: "swap",
 });
 
-const plusJakarta = Plus_Jakarta_Sans({
-  variable: "--font-jakarta",
+const dmSans = DM_Sans({
+  weight: ["300", "400", "500", "700"],
+  variable: "--font-dm-sans",
+  subsets: ["latin"],
+  display: "swap",
+});
+
+const spaceMono = Space_Mono({
+  weight: ["400", "700"],
+  variable: "--font-space-mono",
   subsets: ["latin"],
   display: "swap",
 });
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://woxsen.edu.in"),
-  title: "E-Cell | Woxsen University — Where Innovation Meets Initiative",
+  title: "E-Cell Woxsen — Where Builders Start",
   description:
-    "Official website of the Entrepreneurship Cell at Woxsen University, Hyderabad. Fostering disruptive student founders, venture creation, and grassroots innovation.",
+    "The Entrepreneurship Cell of Woxsen University. We build founders, not just businesses — through hands-on programs, mentorship, and a network that ships.",
   keywords: [
     "E-Cell",
     "Woxsen University",
+    "Where Builders Start",
     "Entrepreneurship Cell",
     "Startups",
     "Hyderabad",
     "Innovation",
-    "Hult Prize",
-    "Incubation",
-    "Student Founders",
   ],
-  authors: [{ name: "E-Cell Woxsen University" }],
   icons: {
     icon: "/ecell-logo.png",
   },
   openGraph: {
-    title: "E-Cell | Woxsen University",
+    title: "E-Cell Woxsen — Where Builders Start",
     description:
-      "Where Innovation Meets Initiative. The student-led startup ecosystem of Woxsen University.",
+      "The Entrepreneurship Cell of Woxsen University. We build founders, not just businesses — through hands-on programs, mentorship, and a network that ships.",
     url: "https://woxsen.edu.in/ecell",
     siteName: "E-Cell Woxsen University",
     images: [
@@ -60,9 +66,9 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${outfit.variable} ${plusJakarta.variable} dark antialiased scroll-smooth`}
+      className={`${bebasNeue.variable} ${dmSans.variable} ${spaceMono.variable} dark antialiased scroll-smooth`}
     >
-      <body className="bg-[#05070B] text-slate-100 font-sans selection:bg-emerald-500/30 selection:text-emerald-200 overflow-x-hidden min-h-screen">
+      <body className="bg-[#040608] text-slate-100 font-sans selection:bg-emerald-500/30 selection:text-emerald-200 overflow-hidden min-h-screen">
         {children}
       </body>
     </html>
