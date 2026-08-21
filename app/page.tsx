@@ -47,7 +47,7 @@ export default function Home() {
       {/* Chapter & Progress HUD */}
       <ScrollProgressHUD
         currentFrame={currentFrame}
-        totalFrames={1041}
+        totalFrames={840}
       />
 
       {/* Application / Ideas Modal */}

@@ -23,11 +23,11 @@ export default function Header({
   }, [currentFrame]);
 
   const navItems = [
-    { label: "Campus Entry", frame: 1, active: currentFrame < 370 },
-    { label: "About E-Cell", frame: 375, active: currentFrame >= 370 && currentFrame <= 450 },
-    { label: "Events", frame: 630, active: currentFrame > 600 && currentFrame <= 740 },
-    { label: "Core Team", frame: 780, active: currentFrame > 740 && currentFrame <= 920 },
-    { label: "Contact", frame: 980, active: currentFrame > 920 },
+    { label: "Campus Entry", frame: 1, active: currentFrame < 365 },
+    { label: "About E-Cell", frame: 378, active: currentFrame >= 365 && currentFrame < 430 },
+    { label: "Events", frame: 630, active: currentFrame >= 590 && currentFrame < 690 },
+    { label: "Core Team", frame: 715, active: currentFrame >= 690 && currentFrame < 775 },
+    { label: "Contact", frame: 795, active: currentFrame >= 775 },
   ];
 
   return (

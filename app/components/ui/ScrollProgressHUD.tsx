@@ -20,19 +20,19 @@ export default function ScrollProgressHUD({
   let chapterName = "CAMPUS APPROACH";
   let chapterIndex = "01";
 
-  if (currentFrame >= 370 && currentFrame < 390) {
+  if (currentFrame >= 365 && currentFrame <= 395) {
     chapterName = "ABOUT E-CELL";
     chapterIndex = "02";
-  } else if (currentFrame >= 390 && currentFrame < 600) {
+  } else if (currentFrame > 395 && currentFrame < 600) {
     chapterName = "INSIDE HEADQUARTERS";
     chapterIndex = "03";
-  } else if (currentFrame >= 600 && currentFrame < 740) {
+  } else if (currentFrame >= 600 && currentFrame < 690) {
     chapterName = "FLAGSHIP INITIATIVES";
     chapterIndex = "04";
-  } else if (currentFrame >= 740 && currentFrame < 920) {
+  } else if (currentFrame >= 690 && currentFrame < 775) {
     chapterName = "CORE LEADERSHIP";
     chapterIndex = "05";
-  } else if (currentFrame >= 920) {
+  } else if (currentFrame >= 775) {
     chapterName = "CONNECT & COLLABORATE";
     chapterIndex = "06";
   }

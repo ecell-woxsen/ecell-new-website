@@ -14,69 +14,68 @@ export default function WallGalleryOverlay({
   currentFrame,
   onOpenJoinModal,
 }: WallGalleryOverlayProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const trackRef = useRef<HTMLDivElement>(null);
-  const [maxScrollWidth, setMaxScrollWidth] = useState(0);
+  const [renderScale, setRenderScale] = useState(1);
 
-  // Active range: frames 590 to 1041
+  // Active range: frames 592 to 840
   let opacity = 0;
-  if (currentFrame >= 590 && currentFrame < 610) {
-    opacity = (currentFrame - 590) / 20;
-  } else if (currentFrame >= 610) {
+  if (currentFrame >= 592 && currentFrame < 605) {
+    opacity = (currentFrame - 592) / 13;
+  } else if (currentFrame >= 605) {
     opacity = 1;
   }
 
   useEffect(() => {
-    const calculateWidth = () => {
-      if (trackRef.current && containerRef.current) {
-        const trackWidth = trackRef.current.scrollWidth;
-        const viewportWidth = window.innerWidth;
-        // Total distance the track needs to shift from start to end
-        setMaxScrollWidth(Math.max(0, trackWidth - viewportWidth + 120));
-      }
+    const updateScale = () => {
+      const scale = Math.max(window.innerWidth / 1280, window.innerHeight / 720);
+      setRenderScale(scale);
     };
 
-    calculateWidth();
-    window.addEventListener("resize", calculateWidth);
-    return () => window.removeEventListener("resize", calculateWidth);
+    updateScale();
+    window.addEventListener("resize", updateScale);
+    return () => window.removeEventListener("resize", updateScale);
   }, []);
 
-  if (opacity <= 0.01) return null;
-
-  // Normalized progression along the wall (0 at frame 605, 1 at frame 1040)
-  const startFrame = 605;
-  const endFrame = 1040;
-  const t = Math.min(1, Math.max(0, (currentFrame - startFrame) / (endFrame - startFrame)));
-
-  // Smooth easing for physical wall tracking
-  const translateX = -(t * maxScrollWidth);
+  // Physical 1:1 camera tracking math:
+  // In the 1280x720 video, the concrete wall moves left by ~5.25px per frame from frame 600 to 840.
+  const frameOffset = Math.max(0, currentFrame - 600);
+  const pxPerFrame = 5.25;
+  const translateX = -(frameOffset * pxPerFrame * renderScale);
 
   return (
     <div
-      ref={containerRef}
-      className="fixed inset-0 z-30 flex items-center overflow-hidden pointer-events-none transition-opacity duration-300"
-      style={{ opacity }}
+      className="fixed inset-0 z-30 flex items-center overflow-hidden transition-opacity duration-300 pointer-events-none"
+      style={{
+        opacity,
+        visibility: opacity <= 0.005 ? "hidden" : "visible",
+      }}
     >
       {/* Wall Spotlight Ambient Glow */}
       <div className="absolute top-0 left-1/4 w-96 h-96 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute top-0 right-1/4 w-96 h-96 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
 
-      {/* Horizontally Panning Gallery Track */}
+      {/* Physically 1:1 Wall-Anchored Gallery Track */}
       <div
-        ref={trackRef}
-        className="flex items-center gap-8 sm:gap-12 pl-6 sm:pl-16 md:pl-24 pr-16 py-12 pointer-events-auto will-change-transform transition-transform duration-100 ease-out"
+        className={`flex items-center gap-12 sm:gap-16 md:gap-24 pl-8 sm:pl-16 md:pl-28 pr-24 py-12 will-change-transform ${
+          opacity > 0.1 ? "pointer-events-auto" : "pointer-events-none"
+        }`}
         style={{
           transform: `translate3d(${translateX}px, 0, 0)`,
         }}
       >
-        {/* Section 1: Flagship Initiatives & Events */}
-        <EventsWallCard onOpenJoinModal={onOpenJoinModal} />
+        {/* Section 1: Flagship Initiatives & Events (Anchored at beginning of wall) */}
+        <div className="shrink-0 transition-transform duration-300 hover:scale-[1.01]">
+          <EventsWallCard onOpenJoinModal={onOpenJoinModal} />
+        </div>
 
-        {/* Section 2: Core Team Leadership */}
-        <TeamWallCards />
+        {/* Section 2: Core Team Leadership (Anchored at middle of wall) */}
+        <div className="shrink-0 transition-transform duration-300 hover:scale-[1.01]">
+          <TeamWallCards />
+        </div>
 
-        {/* Section 3: Connect & Application Form */}
-        <ContactWallCard />
+        {/* Section 3: Connect & Application Form (Anchored at end of wall) */}
+        <div className="shrink-0 transition-transform duration-300 hover:scale-[1.01]">
+          <ContactWallCard />
+        </div>
       </div>
     </div>
   );
