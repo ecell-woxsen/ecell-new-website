@@ -3,8 +3,6 @@
 import React, { useState, useCallback } from "react";
 import ScrollytellingEngine from "./components/ScrollytellingEngine";
 import Header from "./components/Header";
-import AudioController from "./components/ui/AudioController";
-import ScrollProgressHUD from "./components/ui/ScrollProgressHUD";
 import JoinApplyModal from "./components/modals/JoinApplyModal";
 
 export default function Home() {
@@ -39,15 +37,6 @@ export default function Home() {
         onOpenJoinModal={() => setIsJoinModalOpen(true)}
         targetNavigationFrame={targetNavigationFrame}
         onNavigationComplete={handleNavigationComplete}
-      />
-
-      {/* Ambient Audio Controller */}
-      <AudioController />
-
-      {/* Chapter & Progress HUD */}
-      <ScrollProgressHUD
-        currentFrame={currentFrame}
-        totalFrames={840}
       />
 
       {/* Application / Ideas Modal */}
