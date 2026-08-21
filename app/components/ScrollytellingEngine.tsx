@@ -16,45 +16,45 @@ interface ScrollytellingEngineProps {
 const TOTAL_FRAMES = 1041;
 const CRITICAL_PRELOAD_COUNT = 60;
 
-// Dynamic Non-Linear Scroll Sensitivity Curve
+// Dynamic Non-Linear Scroll Sensitivity Curve (Slowed down for deliberate, smooth control)
 const getDynamicSensitivity = (frame: number): number => {
-  // Act 1 Fast Glider: Campus approach (Frames 1 - 345)
+  // Act 1 Transit: Campus approach (Frames 1 - 345) -> Smooth, controlled glide
   if (frame < 345) {
-    return 0.75;
+    return 0.26;
   }
   // Deceleration into Door Threshold (Frames 345 - 368)
   if (frame >= 345 && frame < 368) {
     const t = (frame - 345) / 23;
-    return 0.75 - t * 0.65; // smoothly drops to 0.10
+    return 0.26 - t * 0.215; // smoothly drops to 0.045
   }
-  // Milestone 1 Reading Zone: Door Scene (Frames 368 - 395) -> Slow, smooth & readable
+  // Milestone 1 Reading Zone: Door Scene (Frames 368 - 395) -> Ultra-smooth & sticky reading pause
   if (frame >= 368 && frame <= 395) {
-    return 0.10;
+    return 0.045;
   }
   // Acceleration out of Door into Boardroom (Frames 395 - 430)
   if (frame > 395 && frame <= 430) {
     const t = (frame - 395) / 35;
-    return 0.10 + t * 0.65; // smoothly rises back to 0.75
+    return 0.045 + t * 0.215; // smoothly rises back to 0.26
   }
-  // Act 2 Fast Glider: Boardroom Traversal (Frames 430 - 580)
+  // Act 2 Transit: Boardroom Traversal (Frames 430 - 580) -> Smooth, controlled glide
   if (frame > 430 && frame < 580) {
-    return 0.75;
+    return 0.26;
   }
   // Deceleration into Concrete Wall (Frames 580 - 605)
   if (frame >= 580 && frame <= 605) {
     const t = (frame - 580) / 25;
-    return 0.75 - t * 0.57; // smoothly drops to 0.18
+    return 0.26 - t * 0.195; // smoothly drops to 0.065
   }
-  // Milestone 2 Reading Zone: Extended Concrete Gallery Wall (Frames 605 - 1041) -> Slow & smooth
-  return 0.18;
+  // Milestone 2 Reading Zone: Extended Concrete Gallery Wall (Frames 605 - 1041) -> Slow & comfortable reading pace
+  return 0.065;
 };
 
 // Dynamic Lerp Damping factor (Lower = smoother & more cinematic)
 const getDynamicLerpFactor = (frame: number): number => {
   if ((frame >= 365 && frame <= 398) || frame >= 600) {
-    return 0.085; // Extra smooth, luxurious deceleration for reading sections
+    return 0.075; // Extra smooth, luxurious deceleration for reading sections
   }
-  return 0.16; // Snappy, responsive glide for transit sections
+  return 0.11; // Smooth, continuous glide for transit sections
 };
 
 export default function ScrollytellingEngine({
@@ -303,7 +303,7 @@ export default function ScrollytellingEngine({
         touchStartYRef.current = currentY;
 
         const currentTarget = targetFrameRef.current;
-        const sensitivity = getDynamicSensitivity(currentTarget) * 1.5;
+        const sensitivity = getDynamicSensitivity(currentTarget);
         const delta = deltaY * sensitivity;
 
         const newTarget = Math.max(
@@ -323,7 +323,7 @@ export default function ScrollytellingEngine({
       let step = 0;
       const currentTarget = targetFrameRef.current;
       const isSlowZone = (currentTarget >= 365 && currentTarget <= 395) || currentTarget >= 600;
-      const deltaMagnitude = isSlowZone ? 12 : 35;
+      const deltaMagnitude = isSlowZone ? 6 : 16;
 
       if (e.key === "ArrowDown" || e.key === "PageDown" || e.key === " ") {
         step = deltaMagnitude;
