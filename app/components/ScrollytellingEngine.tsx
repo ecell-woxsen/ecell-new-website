@@ -16,72 +16,72 @@ interface ScrollytellingEngineProps {
 const TOTAL_FRAMES = 840;
 const CRITICAL_PRELOAD_COUNT = 60;
 
-// Dynamic Non-Linear Scroll Sensitivity Curve with Sticky Section Resistance
+// Dynamic Sensitivity Curve for Slow, Gentle Cinematic Speed
 const getDynamicSensitivity = (frame: number): number => {
-  // Section 0 Sticky Pocket: Hero Landing (Frames 1 - 12)
-  if (frame <= 12) {
-    return 0.040;
+  // Hero Landing (Frames 1 - 15) -> Slow, calm drift
+  if (frame <= 15) {
+    return 0.10;
   }
-  // Act 1 Transit: Campus approach (Frames 13 - 345) -> Smooth, swift glide
+  // Act 1 Transit: Campus approach (Frames 15 - 345) -> Gentle, steady glide
   if (frame < 345) {
-    return 0.28;
+    return 0.22;
   }
   // Deceleration into Door Threshold (Frames 345 - 368)
   if (frame >= 345 && frame < 368) {
     const t = (frame - 345) / 23;
-    return 0.28 - t * 0.25; // smoothly drops to 0.030
+    return 0.22 - t * 0.14;
   }
-  // Section 1 Sticky Pocket: About E-Cell Door Scene (Frames 368 - 395)
+  // Milestone 1: About E-Cell Door Scene (Frames 368 - 395) -> Slow, calm reading drift
   if (frame >= 368 && frame <= 395) {
-    return 0.030;
+    return 0.08;
   }
-  // Acceleration out of Door into Boardroom (Frames 395 - 415)
-  if (frame > 395 && frame <= 415) {
-    const t = (frame - 395) / 20;
-    return 0.030 + t * 0.25; // smoothly rises back to 0.28
+  // Acceleration out of Door into Boardroom (Frames 395 - 420)
+  if (frame > 395 && frame <= 420) {
+    const t = (frame - 395) / 25;
+    return 0.08 + t * 0.14;
   }
-  // Act 2 Transit: Boardroom Traversal (Frames 415 - 600) -> Smooth, swift glide
-  if (frame > 415 && frame < 600) {
-    return 0.28;
+  // Act 2 Transit: Boardroom Traversal (Frames 420 - 600) -> Gentle, steady glide
+  if (frame > 420 && frame < 600) {
+    return 0.22;
   }
-  // Deceleration into Events Section (Frames 600 - 620)
+  // Deceleration into Wall Gallery (Frames 600 - 620)
   if (frame >= 600 && frame < 620) {
     const t = (frame - 600) / 20;
-    return 0.28 - t * 0.245; // smoothly drops to 0.035
+    return 0.22 - t * 0.12;
   }
-  // Section 2 Sticky Pocket: Flagship Events (Frames 620 - 660)
+  // Milestone 2A: Flagship Events (Frames 620 - 660) -> Slow reading pace
   if (frame >= 620 && frame <= 660) {
-    return 0.035;
+    return 0.10;
   }
-  // Transit between Events and Team (Frames 660 - 705) -> Swift glide
+  // Transit between Events and Team (Frames 660 - 705) -> Gentle glide
   if (frame > 660 && frame < 705) {
-    return 0.22;
+    return 0.18;
   }
-  // Section 3 Sticky Pocket: Core Team Leadership (Frames 705 - 750)
+  // Milestone 2B: Core Team Leadership (Frames 705 - 750) -> Slow reading pace
   if (frame >= 705 && frame <= 750) {
-    return 0.035;
+    return 0.10;
   }
-  // Transit between Team and Contact (Frames 750 - 790) -> Swift glide
+  // Transit between Team and Contact (Frames 750 - 790) -> Gentle glide
   if (frame > 750 && frame < 790) {
-    return 0.22;
+    return 0.18;
   }
-  // Section 4 Sticky Pocket: Contact & Community (Frames 790 - 840)
-  return 0.035;
+  // Milestone 2C: Contact & Application (Frames 790 - 840) -> Slow reading pace
+  return 0.10;
 };
 
-// Dynamic Lerp Damping factor (Cushions firmly in reading pockets, snappy in transits)
-const getDynamicLerpFactor = (frame: number): number => {
-  const isStickyPocket =
-    frame <= 12 ||
+// Very Low Friction (Near-Frictionless, Ultra-Buttery Momentum Drift)
+const getDynamicFriction = (frame: number): number => {
+  const isReadingZone =
+    frame <= 15 ||
     (frame >= 368 && frame <= 395) ||
     (frame >= 620 && frame <= 660) ||
     (frame >= 705 && frame <= 750) ||
     frame >= 790;
 
-  if (isStickyPocket) {
-    return 0.10; // Cushioned, sticky resistance inside sections
+  if (isReadingZone) {
+    return 0.92; // Very low friction inside reading zones for smooth, unhurried drifting
   }
-  return 0.18; // Crisp, responsive glide in transit zones
+  return 0.95; // Ultra-low friction in transits for frictionless cinematic glide
 };
 
 export default function ScrollytellingEngine({
@@ -102,9 +102,10 @@ export default function ScrollytellingEngine({
   const [currentFrame, setCurrentFrame] = useState(1);
   const [videoOpacity, setVideoOpacity] = useState(1);
 
-  // Animation and virtual scroll refs
-  const targetFrameRef = useRef(1);
+  // Physics Velocity & Position tracking
   const currentFrameRef = useRef(1);
+  const velocityRef = useRef(0);
+  const targetNavFrameRef = useRef<number | null>(null);
   const animFrameIdRef = useRef<number | null>(null);
   const lastDrawnFrameRef = useRef<number | null>(null);
   const touchStartYRef = useRef(0);
@@ -144,8 +145,8 @@ export default function ScrollytellingEngine({
   // Priority window loader ahead of scroll trajectory
   const preloadPriorityWindow = useCallback(
     (centerFrame: number) => {
-      const start = Math.max(1, centerFrame - 20);
-      const end = Math.min(TOTAL_FRAMES, centerFrame + 40);
+      const start = Math.max(1, centerFrame - 30);
+      const end = Math.min(TOTAL_FRAMES, centerFrame + 60);
       for (let i = start; i <= end; i++) {
         requestFrame(i);
       }
@@ -286,39 +287,39 @@ export default function ScrollytellingEngine({
   // Respond to programmatic header navigation
   useEffect(() => {
     if (targetNavigationFrame !== null && targetNavigationFrame !== undefined) {
-      targetFrameRef.current = Math.min(TOTAL_FRAMES, Math.max(1, targetNavigationFrame));
+      targetNavFrameRef.current = Math.min(TOTAL_FRAMES, Math.max(1, targetNavigationFrame));
+      velocityRef.current = 0;
       preloadPriorityWindow(targetNavigationFrame);
-      if (onNavigationComplete) {
-        onNavigationComplete();
-      }
     }
-  }, [targetNavigationFrame, onNavigationComplete, preloadPriorityWindow]);
+  }, [targetNavigationFrame, preloadPriorityWindow]);
 
-  // Non-Linear Virtual Scroll Engine
+  // Physics Acceleration Wheel & Touch Interaction Listeners
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
 
-      const currentTarget = targetFrameRef.current;
-      const sensitivity = getDynamicSensitivity(currentTarget);
-      const delta = e.deltaY * sensitivity;
+      // Clear any programmatic jump when user actively scrolls
+      targetNavFrameRef.current = null;
 
-      const newTarget = Math.max(
-        1,
-        Math.min(TOTAL_FRAMES, currentTarget + delta)
-      );
+      const current = currentFrameRef.current;
+      const sensitivity = getDynamicSensitivity(current);
 
-      targetFrameRef.current = newTarget;
-      preloadPriorityWindow(Math.round(newTarget));
+      // Gentle, slow impulse with low friction for long-lasting buttery drift
+      const impulse = e.deltaY * sensitivity * 0.028;
+      velocityRef.current += impulse;
 
-      // Video crossfade at top
-      const vOpacity = Math.max(0, 1 - (newTarget - 1) / 12);
-      setVideoOpacity(vOpacity);
+      // Controlled max velocity for steady, cinematic speed
+      const maxVelocity = 4.2;
+      velocityRef.current = Math.max(-maxVelocity, Math.min(maxVelocity, velocityRef.current));
+
+      preloadPriorityWindow(Math.round(current + velocityRef.current * 18));
     };
 
     const handleTouchStart = (e: TouchEvent) => {
       if (e.touches.length > 0) {
         touchStartYRef.current = e.touches[0].clientY;
+        velocityRef.current = 0;
+        targetNavFrameRef.current = null;
       }
     };
 
@@ -329,46 +330,34 @@ export default function ScrollytellingEngine({
         const deltaY = touchStartYRef.current - currentY;
         touchStartYRef.current = currentY;
 
-        const currentTarget = targetFrameRef.current;
-        const sensitivity = getDynamicSensitivity(currentTarget);
-        const delta = deltaY * sensitivity;
+        const current = currentFrameRef.current;
+        const sensitivity = getDynamicSensitivity(current);
+        const impulse = deltaY * sensitivity * 0.035;
+        velocityRef.current += impulse;
 
-        const newTarget = Math.max(
-          1,
-          Math.min(TOTAL_FRAMES, currentTarget + delta)
-        );
+        const maxVelocity = 4.2;
+        velocityRef.current = Math.max(-maxVelocity, Math.min(maxVelocity, velocityRef.current));
 
-        targetFrameRef.current = newTarget;
-        preloadPriorityWindow(Math.round(newTarget));
-
-        const vOpacity = Math.max(0, 1 - (newTarget - 1) / 12);
-        setVideoOpacity(vOpacity);
+        preloadPriorityWindow(Math.round(current + velocityRef.current * 18));
       }
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      let step = 0;
-      const currentTarget = targetFrameRef.current;
-      const isSlowZone = (currentTarget >= 365 && currentTarget <= 395) || currentTarget >= 595;
-      const deltaMagnitude = isSlowZone ? 5 : 14;
+      let impulse = 0;
+      const current = currentFrameRef.current;
+      const sensitivity = getDynamicSensitivity(current);
 
       if (e.key === "ArrowDown" || e.key === "PageDown" || e.key === " ") {
-        step = deltaMagnitude;
+        impulse = 2.0 * sensitivity;
       } else if (e.key === "ArrowUp" || e.key === "PageUp") {
-        step = -deltaMagnitude;
+        impulse = -2.0 * sensitivity;
       }
 
-      if (step !== 0) {
+      if (impulse !== 0) {
         e.preventDefault();
-        const newTarget = Math.max(
-          1,
-          Math.min(TOTAL_FRAMES, currentTarget + step)
-        );
-        targetFrameRef.current = newTarget;
-        preloadPriorityWindow(Math.round(newTarget));
-
-        const vOpacity = Math.max(0, 1 - (newTarget - 1) / 12);
-        setVideoOpacity(vOpacity);
+        targetNavFrameRef.current = null;
+        velocityRef.current += impulse;
+        preloadPriorityWindow(Math.round(current + velocityRef.current * 18));
       }
     };
 
@@ -385,31 +374,64 @@ export default function ScrollytellingEngine({
     };
   }, [preloadPriorityWindow]);
 
-  // 60 FPS Adaptive Linear Interpolation (Lerp) Animation Loop
+  // 60/120 FPS Ultra-Low Friction Physics Simulation Loop
   useEffect(() => {
     const renderLoop = () => {
-      const target = targetFrameRef.current;
-      const current = currentFrameRef.current;
-      const diff = target - current;
+      let current = currentFrameRef.current;
 
-      const lerpFactor = getDynamicLerpFactor(current);
+      // 1. Programmatic Navigation Target Animation (Navbar jumps)
+      if (targetNavFrameRef.current !== null) {
+        const target = targetNavFrameRef.current;
+        const diff = target - current;
 
-      if (Math.abs(diff) > 0.001) {
-        currentFrameRef.current += diff * lerpFactor;
-      } else {
-        currentFrameRef.current = target;
+        if (Math.abs(diff) > 0.08) {
+          current += diff * 0.10;
+        } else {
+          current = target;
+          targetNavFrameRef.current = null;
+          if (onNavigationComplete) {
+            onNavigationComplete();
+          }
+        }
       }
 
-      const roundedFrame = Math.round(currentFrameRef.current);
-      const clampedFrame = Math.min(TOTAL_FRAMES, Math.max(1, roundedFrame));
+      // 2. Physics-based Velocity Integration with Ultra-Low Friction
+      if (Math.abs(velocityRef.current) > 0.001) {
+        current += velocityRef.current;
 
-      if (clampedFrame !== lastDrawnFrameRef.current) {
-        drawFrameToCanvas(clampedFrame);
+        const friction = getDynamicFriction(current);
+        velocityRef.current *= friction;
+
+        // Clean seamless cutoff
+        if (Math.abs(velocityRef.current) < 0.015) {
+          velocityRef.current = 0;
+        }
       }
 
-      setCurrentFrame(clampedFrame);
+      // 3. Strict Boundary Clamping [1, TOTAL_FRAMES]
+      if (current < 1) {
+        current = 1;
+        velocityRef.current = 0;
+      } else if (current > TOTAL_FRAMES) {
+        current = TOTAL_FRAMES;
+        velocityRef.current = 0;
+      }
+
+      currentFrameRef.current = current;
+
+      // 4. Hero Video Crossfade calculation
+      const vOpacity = Math.max(0, 1 - (current - 1) / 14);
+      setVideoOpacity(vOpacity);
+
+      // 5. Canvas Render Update
+      const roundedFrame = Math.round(current);
+      if (roundedFrame !== lastDrawnFrameRef.current) {
+        drawFrameToCanvas(roundedFrame);
+      }
+
+      setCurrentFrame(roundedFrame);
       if (onFrameUpdate) {
-        onFrameUpdate(clampedFrame);
+        onFrameUpdate(roundedFrame);
       }
 
       animFrameIdRef.current = requestAnimationFrame(renderLoop);
@@ -422,7 +444,7 @@ export default function ScrollytellingEngine({
         cancelAnimationFrame(animFrameIdRef.current);
       }
     };
-  }, [drawFrameToCanvas, onFrameUpdate]);
+  }, [drawFrameToCanvas, onFrameUpdate, onNavigationComplete]);
 
   // Resize handler
   useEffect(() => {
@@ -435,8 +457,8 @@ export default function ScrollytellingEngine({
   }, [drawFrameToCanvas]);
 
   const handleExploreEvents = () => {
-    targetFrameRef.current = 630;
-    preloadPriorityWindow(630);
+    targetNavFrameRef.current = 640;
+    preloadPriorityWindow(640);
   };
 
   return (
@@ -483,13 +505,13 @@ export default function ScrollytellingEngine({
           onOpenJoinModal={onOpenJoinModal}
         />
 
-        {/* Overlay 2: Door About Us (Frames 370 - 390) */}
+        {/* Overlay 2: Door About Us (Frames 368 - 395) */}
         <DoorAboutOverlay
           currentFrame={currentFrame}
           onOpenJoinModal={onOpenJoinModal}
         />
 
-        {/* Overlay 3: Wall Gallery (Frames 600 - 840) */}
+        {/* Overlay 3: Wall Gallery (Frames 605 - 840) */}
         <WallGalleryOverlay
           currentFrame={currentFrame}
           onOpenJoinModal={onOpenJoinModal}
