@@ -19,52 +19,95 @@ export default function HeroOverlay({
 
   if (opacity <= 0.01) return null;
 
+  const part1 = "WHERE ";
+  const part2 = "BUILDERS";
+  const part3 = " START.";
+
   return (
     <div
-      className="fixed inset-0 z-20 flex flex-col justify-center items-center px-4 text-center pointer-events-none transition-opacity duration-300"
+      className="fixed inset-0 z-20 flex flex-col justify-center items-center px-6 sm:px-16 text-center pointer-events-none transition-opacity duration-300"
       style={{
         opacity,
         transform: `translateY(-${translateY}px)`,
       }}
     >
-      <div className="max-w-2xl mx-auto flex flex-col items-center pointer-events-auto">
-        {/* Eyebrow / Kicker in Space Mono */}
-        <p className="font-mono text-[10px] sm:text-xs font-semibold tracking-[0.22em] text-white uppercase mb-2.5 sm:mb-3 select-none drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]">
-          ENTREPRENEURSHIP CELL · WOXSEN UNIVERSITY
+      <div className="relative z-10 max-w-[880px] mx-auto flex flex-col items-center text-center px-4 pointer-events-auto">
+        {/* Subtitle / Eyebrow */}
+        <p
+          className="font-mono text-[11px] tracking-[0.1em] uppercase text-white mb-6 animate-fade-up delay-1 text-center drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] select-none"
+          style={{ textAlign: "center" }}
+        >
+          Entrepreneurship Cell · Woxsen University
         </p>
 
-        {/* Main Display Headline on a Single Baseline-Aligned Line */}
-        <h1 className="font-display flex items-baseline justify-center whitespace-nowrap select-none mb-3 sm:mb-4 uppercase leading-none drop-shadow-[0_4px_16px_rgba(0,0,0,0.8)]">
-          <span className="text-3xl sm:text-5xl md:text-6xl font-bold text-white tracking-wide">
-            WHERE
-          </span>
-          <span className="text-4xl sm:text-6xl md:text-7xl font-bold text-[#22c55e] tracking-wide mx-1.5 sm:mx-2.5 inline-block">
-            BUILDERS
-          </span>
-          <span className="text-3xl sm:text-5xl md:text-6xl font-bold text-white tracking-wide">
-            START.
+        {/* Main Heading with Staggered Character Reveal */}
+        <h1
+          className="font-display text-[clamp(44px,7.5vw,100px)] leading-[0.95] tracking-[-0.01em] text-white mb-8 text-center select-none drop-shadow-[0_4px_10px_rgba(0,0,0,0.8)]"
+          style={{ textAlign: "center" }}
+          aria-label="WHERE BUILDERS START."
+        >
+          <span aria-hidden="true" className="inline-block whitespace-nowrap">
+            {part1.split("").map((char, index) => (
+              <span
+                key={`p1-${index}`}
+                className="inline-block animate-letter-reveal"
+                style={{
+                  animationDelay: `${index * 0.04}s`,
+                  whiteSpace: char === " " ? "pre" : "normal",
+                }}
+              >
+                {char}
+              </span>
+            ))}
+            {part2.split("").map((char, index) => (
+              <span
+                key={`p2-${index}`}
+                className="inline-block text-[#3fb950] animate-letter-reveal text-[1.25em]"
+                style={{
+                  animationDelay: `${(part1.length + index) * 0.04}s`,
+                  whiteSpace: char === " " ? "pre" : "normal",
+                }}
+              >
+                {char}
+              </span>
+            ))}
+            {part3.split("").map((char, index) => (
+              <span
+                key={`p3-${index}`}
+                className="inline-block animate-letter-reveal"
+                style={{
+                  animationDelay: `${(part1.length + part2.length + index) * 0.04}s`,
+                  whiteSpace: char === " " ? "pre" : "normal",
+                }}
+              >
+                {char}
+              </span>
+            ))}
           </span>
         </h1>
 
-        {/* Subtitle Description in DM Sans */}
-        <p className="font-body max-w-lg text-xs sm:text-sm md:text-[15px] text-white font-medium leading-relaxed mb-6 sm:mb-7 px-4 drop-shadow-[0_2px_12px_rgba(0,0,0,0.95)]">
+        {/* Description */}
+        <p
+          className="max-w-[560px] text-[15px] leading-[1.8] text-white font-light mb-10 animate-fade-up delay-3 text-center drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]"
+          style={{ textAlign: "center", marginLeft: "auto", marginRight: "auto" }}
+        >
           The Entrepreneurship Cell of Woxsen University. We build founders, not just businesses — through hands-on programs, mentorship, and a network that ships.
         </p>
 
-        {/* Action Buttons in Space Mono */}
-        <div className="flex flex-wrap items-center justify-center gap-2.5 sm:gap-3 font-mono">
+        {/* Buttons */}
+        <div className="flex items-center justify-center gap-4 animate-fade-up delay-4 max-sm:flex-col max-sm:w-full font-mono">
           <button
             onClick={onExploreClick}
-            className="px-5 sm:px-6 py-2.5 rounded-full bg-[#16a34a] hover:bg-[#22c55e] text-white text-[11px] sm:text-xs font-bold tracking-wider uppercase shadow-lg shadow-emerald-950/40 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+            className="px-7 py-3 rounded-full bg-[#16a34a] hover:bg-[#22c55e] text-white text-xs sm:text-sm font-bold tracking-wider uppercase shadow-lg shadow-emerald-950/40 transition-all hover:scale-105 active:scale-95 cursor-pointer max-sm:w-full"
           >
-            EXPLORE EVENTS
+            Explore Events
           </button>
 
           <button
             onClick={onOpenJoinModal}
-            className="px-5 sm:px-6 py-2.5 rounded-full bg-black/40 hover:bg-black/60 text-slate-200 hover:text-white text-[11px] sm:text-xs font-bold tracking-wider uppercase border border-white/20 hover:border-white/40 backdrop-blur-md transition-all hover:scale-105 active:scale-95 cursor-pointer"
+            className="px-7 py-3 rounded-full bg-black/40 hover:bg-black/60 text-slate-200 hover:text-white text-xs sm:text-sm font-bold tracking-wider uppercase border border-white/20 hover:border-white/40 backdrop-blur-md transition-all hover:scale-105 active:scale-95 cursor-pointer max-sm:w-full"
           >
-            SUBMIT YOUR IDEA
+            Submit Your Idea
           </button>
         </div>
       </div>

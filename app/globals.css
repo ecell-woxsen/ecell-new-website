@@ -1,7 +1,19 @@
 @import "tailwindcss";
 
+/* ===== FONTS ===== */
+@font-face {
+  font-family: "Bebas Neue";
+  src: url("https://fonts.gstatic.com/s/bebasneue/v14/JTUSjIg69CK48gW7PXoQ.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+
 :root {
-  --font-bebas: var(--font-bebas), "Bebas Neue", sans-serif;
+  --ink: #040608;
+  --white: #ffffff;
+  --green-lt: #3fb950;
+  --green-primary: #16a34a;
+  --font-bebas: "Bebas Neue", sans-serif;
   --font-dm-sans: var(--font-dm-sans), "DM Sans", sans-serif;
   --font-space-mono: var(--font-space-mono), "Space Mono", monospace;
 }
@@ -14,9 +26,11 @@ html, body {
 }
 
 body {
-  font-family: var(--font-dm-sans), system-ui, -apple-system, sans-serif;
-  background-color: #040608;
-  color: #f1f5f9;
+  background: var(--ink);
+  color: var(--white);
+  font-family: var(--font-dm-sans), "DM Sans", sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
   position: fixed;
   inset: 0;
   width: 100%;
@@ -24,22 +38,57 @@ body {
 }
 
 .font-display {
-  font-family: var(--font-bebas), sans-serif;
-  letter-spacing: 0.02em;
+  font-family: var(--font-bebas), "Bebas Neue", sans-serif;
+  letter-spacing: -0.01em;
 }
 
 .font-mono {
-  font-family: var(--font-space-mono), monospace;
+  font-family: var(--font-space-mono), "Space Mono", monospace;
 }
 
 .font-body {
-  font-family: var(--font-dm-sans), sans-serif;
+  font-family: var(--font-dm-sans), "DM Sans", sans-serif;
 }
 
 h1, h2, h3, h4, h5, h6, .font-heading {
-  font-family: var(--font-bebas), sans-serif;
-  letter-spacing: 0.02em;
+  font-family: var(--font-bebas), "Bebas Neue", sans-serif;
 }
+
+/* Keyframe Animations from Reference */
+@keyframes letterReveal {
+  0% {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeUp {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-letter-reveal {
+  animation: letterReveal 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-fade-up {
+  animation: fadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.delay-1 { animation-delay: 0.1s; }
+.delay-2 { animation-delay: 0.25s; }
+.delay-3 { animation-delay: 0.4s; }
+.delay-4 { animation-delay: 0.55s; }
 
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
@@ -98,39 +147,4 @@ h1, h2, h3, h4, h5, h6, .font-heading {
     0 30px 60px -15px rgba(0, 0, 0, 0.9),
     0 0 30px rgba(52, 211, 153, 0.15),
     inset 0 1px 0 rgba(255, 255, 255, 0.3);
-}
-
-/* Subtle glow animations */
-@keyframes pulseGlow {
-  0%, 100% {
-    opacity: 0.4;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.8;
-    transform: scale(1.05);
-  }
-}
-
-.animate-pulse-glow {
-  animation: pulseGlow 4s infinite ease-in-out;
-}
-
-/* Text Gradients */
-.text-gradient-emerald {
-  background: linear-gradient(135deg, #34d399 0%, #10b981 50%, #059669 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.text-gradient-silver {
-  background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 50%, #94a3b8 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.text-gradient-sunset {
-  background: linear-gradient(135deg, #fbcfe8 0%, #f472b6 40%, #fb923c 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
 }

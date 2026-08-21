@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import Image from "next/image";
 import { ArrowRight, Menu, X } from "lucide-react";
 
@@ -26,10 +26,7 @@ export default function Header({
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 px-4 sm:px-8 pt-4 sm:pt-6 transition-all duration-500 pointer-events-none">
-      <div className="max-w-7xl mx-auto flex items-center justify-between pointer-events-auto">
-        {/* Left: Spacer or empty on desktop to keep navbar center-balanced */}
-        <div className="w-10 sm:w-28 hidden md:block" />
-
+      <div className="max-w-7xl mx-auto flex items-center justify-center pointer-events-auto">
         {/* Center Floating Pill Navbar */}
         <nav className="flex items-center gap-1.5 sm:gap-3 bg-black/70 border border-white/15 backdrop-blur-2xl px-2 sm:px-3 py-1.5 rounded-full shadow-2xl shadow-black/80">
           {/* Logo Badge */}
@@ -88,21 +85,6 @@ export default function Header({
             {mobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
           </button>
         </nav>
-
-        {/* Top Right: Woxsen University Brand Watermark */}
-        <div className="hidden md:flex items-center gap-2">
-          <div className="flex flex-col items-end">
-            <span className="font-heading font-black text-xs tracking-widest text-white uppercase">
-              WOXSEN
-            </span>
-            <span className="text-[9px] font-mono tracking-widest text-slate-400 uppercase -mt-0.5">
-              UNIVERSITY
-            </span>
-          </div>
-          <div className="w-8 h-8 rounded-lg bg-red-950/60 border border-red-500/30 flex items-center justify-center font-heading font-black text-red-400 text-sm">
-            W
-          </div>
-        </div>
       </div>
 
       {/* Mobile Drawer */}
