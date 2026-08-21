@@ -19,9 +19,9 @@ export default function Header({
 
   const navItems = [
     { label: "ABOUT", frame: 378, active: currentFrame >= 365 && currentFrame < 430 },
-    { label: "EVENTS", frame: 630, active: currentFrame >= 590 && currentFrame < 690 },
-    { label: "TEAM", frame: 715, active: currentFrame >= 690 && currentFrame < 775 },
-    { label: "COMMUNITY", frame: 795, active: currentFrame >= 775 },
+    { label: "EVENTS", frame: 640, active: currentFrame >= 605 && currentFrame < 700 },
+    { label: "TEAM", frame: 725, active: currentFrame >= 700 && currentFrame < 780 },
+    { label: "COMMUNITY", frame: 810, active: currentFrame >= 780 },
   ];
 
   return (

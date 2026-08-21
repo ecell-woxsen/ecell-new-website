@@ -16,11 +16,11 @@ export default function WallGalleryOverlay({
 }: WallGalleryOverlayProps) {
   const [renderScale, setRenderScale] = useState(1);
 
-  // Active range: frames 592 to 840
+  // Active range shifted ~12 frames later: frames 605 to 840
   let opacity = 0;
-  if (currentFrame >= 592 && currentFrame < 605) {
-    opacity = (currentFrame - 592) / 13;
-  } else if (currentFrame >= 605) {
+  if (currentFrame >= 605 && currentFrame < 620) {
+    opacity = (currentFrame - 605) / 15;
+  } else if (currentFrame >= 620) {
     opacity = 1;
   }
 
@@ -35,15 +35,14 @@ export default function WallGalleryOverlay({
     return () => window.removeEventListener("resize", updateScale);
   }, []);
 
-  // Physical 1:1 camera tracking math:
-  // In the 1280x720 video, the concrete wall moves left by ~5.25px per frame from frame 600 to 840.
-  const frameOffset = Math.max(0, currentFrame - 600);
+  // Physical 1:1 camera tracking math starting smoothly at frame 612
+  const frameOffset = Math.max(0, currentFrame - 612);
   const pxPerFrame = 5.25;
   const translateX = -(frameOffset * pxPerFrame * renderScale);
 
   return (
     <div
-      className="fixed inset-0 z-30 flex items-center overflow-hidden transition-opacity duration-200 pointer-events-none"
+      className="fixed inset-0 z-30 flex items-center overflow-hidden transition-opacity duration-300 pointer-events-none"
       style={{
         opacity,
         visibility: opacity <= 0.005 ? "hidden" : "visible",

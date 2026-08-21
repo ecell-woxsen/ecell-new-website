@@ -16,45 +16,72 @@ interface ScrollytellingEngineProps {
 const TOTAL_FRAMES = 840;
 const CRITICAL_PRELOAD_COUNT = 60;
 
-// Dynamic Non-Linear Scroll Sensitivity Curve (Calibrated for responsive 840 frames)
+// Dynamic Non-Linear Scroll Sensitivity Curve with Sticky Section Resistance
 const getDynamicSensitivity = (frame: number): number => {
-  // Act 1 Transit: Campus approach (Frames 1 - 345) -> Smooth, responsive glide
+  // Section 0 Sticky Pocket: Hero Landing (Frames 1 - 12)
+  if (frame <= 12) {
+    return 0.040;
+  }
+  // Act 1 Transit: Campus approach (Frames 13 - 345) -> Smooth, swift glide
   if (frame < 345) {
     return 0.28;
   }
   // Deceleration into Door Threshold (Frames 345 - 368)
   if (frame >= 345 && frame < 368) {
     const t = (frame - 345) / 23;
-    return 0.28 - t * 0.21; // smoothly drops to 0.070
+    return 0.28 - t * 0.25; // smoothly drops to 0.030
   }
-  // Milestone 1 Reading Zone: Door Scene (Frames 368 - 395) -> Comfortable reading pause
+  // Section 1 Sticky Pocket: About E-Cell Door Scene (Frames 368 - 395)
   if (frame >= 368 && frame <= 395) {
-    return 0.070;
+    return 0.030;
   }
-  // Acceleration out of Door into Boardroom (Frames 395 - 430)
-  if (frame > 395 && frame <= 430) {
-    const t = (frame - 395) / 35;
-    return 0.070 + t * 0.21; // smoothly rises back to 0.28
+  // Acceleration out of Door into Boardroom (Frames 395 - 415)
+  if (frame > 395 && frame <= 415) {
+    const t = (frame - 395) / 20;
+    return 0.030 + t * 0.25; // smoothly rises back to 0.28
   }
-  // Act 2 Transit: Boardroom Traversal (Frames 430 - 580) -> Smooth, responsive glide
-  if (frame > 430 && frame < 580) {
+  // Act 2 Transit: Boardroom Traversal (Frames 415 - 600) -> Smooth, swift glide
+  if (frame > 415 && frame < 600) {
     return 0.28;
   }
-  // Deceleration into Concrete Wall (Frames 580 - 600)
-  if (frame >= 580 && frame <= 600) {
-    const t = (frame - 580) / 20;
-    return 0.28 - t * 0.185; // smoothly drops to 0.095
+  // Deceleration into Events Section (Frames 600 - 620)
+  if (frame >= 600 && frame < 620) {
+    const t = (frame - 600) / 20;
+    return 0.28 - t * 0.245; // smoothly drops to 0.035
   }
-  // Milestone 2 Reading Zone: Concrete Gallery Wall (Frames 600 - 840) -> Crisp, responsive, smooth speed
-  return 0.095;
+  // Section 2 Sticky Pocket: Flagship Events (Frames 620 - 660)
+  if (frame >= 620 && frame <= 660) {
+    return 0.035;
+  }
+  // Transit between Events and Team (Frames 660 - 705) -> Swift glide
+  if (frame > 660 && frame < 705) {
+    return 0.22;
+  }
+  // Section 3 Sticky Pocket: Core Team Leadership (Frames 705 - 750)
+  if (frame >= 705 && frame <= 750) {
+    return 0.035;
+  }
+  // Transit between Team and Contact (Frames 750 - 790) -> Swift glide
+  if (frame > 750 && frame < 790) {
+    return 0.22;
+  }
+  // Section 4 Sticky Pocket: Contact & Community (Frames 790 - 840)
+  return 0.035;
 };
 
-// Dynamic Lerp Damping factor (Higher = crisper, immediate response with zero lag)
+// Dynamic Lerp Damping factor (Cushions firmly in reading pockets, snappy in transits)
 const getDynamicLerpFactor = (frame: number): number => {
-  if (frame >= 365 && frame <= 398) {
-    return 0.12; // Smooth deceleration for door section
+  const isStickyPocket =
+    frame <= 12 ||
+    (frame >= 368 && frame <= 395) ||
+    (frame >= 620 && frame <= 660) ||
+    (frame >= 705 && frame <= 750) ||
+    frame >= 790;
+
+  if (isStickyPocket) {
+    return 0.10; // Cushioned, sticky resistance inside sections
   }
-  return 0.16; // Snappy, immediate response for gallery wall & transit
+  return 0.18; // Crisp, responsive glide in transit zones
 };
 
 export default function ScrollytellingEngine({
