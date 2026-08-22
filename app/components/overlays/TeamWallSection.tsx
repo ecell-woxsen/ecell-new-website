@@ -1,14 +1,12 @@
 "use client";
 
 import React from "react";
-import Image from "next/image";
 
 interface TeamMember {
   name: string;
   role: string;
   department?: string;
   image?: string;
-  initials: string;
 }
 
 interface TeamColumn {
@@ -25,10 +23,9 @@ const TEAM_STRUCTURE: TeamColumn[] = [
     type: "large",
     members: [
       {
-        name: "President",
-        role: "President & Head of Initiative",
+        name: "Mohnish Singh Patwal",
+        role: "President",
         department: "School of Business",
-        initials: "PR",
       },
     ],
   },
@@ -41,7 +38,6 @@ const TEAM_STRUCTURE: TeamColumn[] = [
         name: "Vice President",
         role: "Vice President & Operations",
         department: "School of Technology",
-        initials: "VP",
       },
     ],
   },
@@ -54,13 +50,11 @@ const TEAM_STRUCTURE: TeamColumn[] = [
         name: "HC",
         role: "Advisor",
         department: "E-Cell Advisory Board",
-        initials: "HC",
       },
       {
         name: "Nihak",
         role: "Advisor",
         department: "E-Cell Advisory Board",
-        initials: "NK",
       },
     ],
   },
@@ -73,13 +67,11 @@ const TEAM_STRUCTURE: TeamColumn[] = [
         name: "Shrinidhi",
         role: "Secretary & Head of Documentation",
         department: "Documentation & Governance",
-        initials: "SN",
       },
       {
         name: "Abhichandra Medipally",
         role: "Secretary",
         department: "General Secretariat",
-        initials: "AM",
       },
     ],
   },
@@ -92,13 +84,11 @@ const TEAM_STRUCTURE: TeamColumn[] = [
         name: "Imad",
         role: "Head of Technology",
         department: "School of Technology",
-        initials: "IM",
       },
       {
         name: "Aali",
         role: "Lead of Technology",
         department: "School of Technology",
-        initials: "AL",
       },
     ],
   },
@@ -111,13 +101,11 @@ const TEAM_STRUCTURE: TeamColumn[] = [
         name: "Mahek Malpani",
         role: "Head of Marketing & Creatives",
         department: "School of Arts & Design",
-        initials: "MM",
       },
       {
         name: "Shloka",
         role: "Team Lead Marketing & Creatives",
         department: "School of Arts & Design",
-        initials: "SK",
       },
     ],
   },
@@ -130,13 +118,11 @@ const TEAM_STRUCTURE: TeamColumn[] = [
         name: "Mihir Kalway",
         role: "Head of Events & Operations",
         department: "School of Business",
-        initials: "MK",
       },
       {
         name: "Pooja",
         role: "Lead of Events & Operations",
         department: "School of Business",
-        initials: "PJ",
       },
     ],
   },
@@ -149,13 +135,11 @@ const TEAM_STRUCTURE: TeamColumn[] = [
         name: "Pranav",
         role: "Head of Finance & Sponsorship",
         department: "School of Business",
-        initials: "PN",
       },
       {
         name: "Minal",
         role: "Team Lead Finance & Operations",
         department: "School of Business",
-        initials: "ML",
       },
     ],
   },
@@ -168,51 +152,55 @@ const TEAM_STRUCTURE: TeamColumn[] = [
         name: "Reetika",
         role: "Head of Outreach & Partnerships",
         department: "Corporate Partnerships",
-        initials: "RT",
       },
     ],
   },
 ];
 
-function StudioPortraitPlaceholder({
-  initials,
-  aspectClass,
+/**
+ * Photographic Exhibition Print Surface
+ * Features warm studio softbox illumination, subtle photographic grain,
+ * and zero UI badges or card-like styling.
+ */
+function StudioPhotoSurface({
+  name,
+  className,
 }: {
-  initials: string;
-  aspectClass: string;
+  name: string;
+  className: string;
 }) {
   return (
     <div
-      className={`relative w-full ${aspectClass} rounded-xl sm:rounded-2xl overflow-hidden border border-white/15 shadow-[0_16px_40px_rgba(0,0,0,0.85)] bg-gradient-to-b from-[#161a22] via-[#0d1117] to-[#080b10] flex flex-col items-center justify-center group-hover:border-emerald-400/40 transition-all duration-500`}
+      className={`relative overflow-hidden rounded-xl sm:rounded-2xl border border-white/15 shadow-[0_18px_40px_rgba(0,0,0,0.85)] bg-gradient-to-b from-[#1c222c] via-[#11161f] to-[#0a0d13] flex items-center justify-center select-none group-hover:border-emerald-400/40 transition-all duration-500 ${className}`}
     >
-      {/* Subtle Studio Keylight & Fill Glow */}
-      <div className="absolute top-0 right-0 w-36 h-36 bg-white/[0.04] rounded-full blur-2xl pointer-events-none" />
-      <div className="absolute bottom-0 left-0 w-28 h-28 bg-emerald-500/[0.04] rounded-full blur-xl pointer-events-none" />
+      {/* Studio Keylight Exposure Lift from top-left */}
+      <div className="absolute -top-12 -left-12 w-48 h-48 bg-white/[0.06] rounded-full blur-2xl pointer-events-none" />
+      
+      {/* Subtle Rim Light from bottom */}
+      <div className="absolute -bottom-8 -right-8 w-40 h-40 bg-emerald-500/[0.04] rounded-full blur-xl pointer-events-none" />
 
-      {/* Architectural Studio Silhouette Graphic */}
-      <div className="relative z-10 flex flex-col items-center justify-center opacity-85 group-hover:opacity-100 transition-opacity">
-        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full border border-white/20 bg-white/[0.05] backdrop-blur-md flex items-center justify-center mb-2 shadow-inner">
-          <span className="font-mono text-sm sm:text-base font-semibold tracking-wider text-slate-200">
-            {initials}
-          </span>
-        </div>
+      {/* Elegant Photographic Grain & Editorial Placeholder Framing */}
+      <div className="relative z-10 flex flex-col items-center justify-center p-4 text-center">
+        <span className="font-display text-2xl sm:text-3xl text-white/30 tracking-wider uppercase group-hover:text-emerald-400/50 transition-colors">
+          {name.charAt(0)}
+        </span>
       </div>
 
-      {/* Subtle bottom vignette */}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/10 pointer-events-none" />
+      {/* Atmospheric photographic vignette */}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-black/10 pointer-events-none" />
     </div>
   );
 }
 
 export default function TeamWallSection() {
   return (
-    <div className="relative flex items-end gap-10 sm:gap-14 md:gap-18 lg:gap-22 shrink-0 select-none">
+    <div className="relative flex items-center gap-14 sm:gap-18 md:gap-24 lg:gap-32 shrink-0 select-none">
       {/* ========================================================================= */}
-      {/* APPLE STUDIO SOFTBOX AMBIENT LIGHTING                                     */}
-      {/* Diffused, invisible as a shape, soft exposure lift across the wall        */}
+      {/* INVISIBLE APPLE STUDIO SOFTBOX ILLUMINATION                               */}
+      {/* Diffused, seamless exposure lift across the exhibition wall               */}
       {/* ========================================================================= */}
       <div
-        className="absolute -top-32 left-0 right-0 h-[800px] pointer-events-none blur-3xl rounded-full"
+        className="absolute -top-36 left-0 right-0 h-[850px] pointer-events-none blur-3xl rounded-full"
         style={{
           background: `radial-gradient(ellipse at 50% 25%, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.015) 50%, transparent 80%)`,
         }}
@@ -220,56 +208,75 @@ export default function TeamWallSection() {
       />
 
       {/* ========================================================================= */}
-      {/* SECTION HEADER MARKER (Architectural Wayfinding)                           */}
+      {/* CHAPTER OPENING: MUSEUM EXHIBITION TITLE WALL                              */}
+      {/* Printed directly on the architectural wall; zero boxes or cards           */}
       {/* ========================================================================= */}
-      <div className="shrink-0 flex flex-col justify-between h-[420px] lg:h-[460px] pr-4 sm:pr-8 border-r border-white/10">
+      <div className="relative shrink-0 flex flex-col justify-between w-[280px] sm:w-[320px] md:w-[360px] h-[460px] sm:h-[500px] pr-6 sm:pr-8">
         <div>
-          <div className="flex items-center gap-2.5 h-5 mb-3">
+          {/* Level 1: Small Green Editorial Label */}
+          <div className="flex items-center gap-2.5 h-5 mb-4">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.7)]" />
             <span className="font-mono text-[10px] sm:text-[11px] font-semibold tracking-[0.25em] uppercase text-emerald-400 drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
               GOVERNANCE
             </span>
+            <span className="h-px w-8 bg-white/20" />
           </div>
-          <h2 className="font-display text-4xl sm:text-5xl lg:text-6xl text-slate-50 tracking-[-0.01em] uppercase leading-[0.92] drop-shadow-[0_4px_20px_rgba(0,0,0,0.98)] max-w-[200px]">
-            CORE TEAM
+
+          {/* Level 2: Monumental 2-Line Editorial Title */}
+          <h2 className="font-display text-5xl sm:text-6xl md:text-7xl text-slate-50 tracking-[-0.01em] uppercase leading-[0.88] mb-5 drop-shadow-[0_4px_24px_rgba(0,0,0,0.98)]">
+            CORE<br />TEAM
           </h2>
+
+          {/* Level 3: Supporting Exhibition Narrative */}
+          <p className="text-[14px] sm:text-[15px] text-slate-200/85 font-normal leading-[1.65] max-w-[300px] drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]">
+            The strategic and operational leadership steering the venture ecosystem at Woxsen University.
+          </p>
         </div>
-        <p className="font-mono text-[10px] tracking-[0.2em] text-slate-400 uppercase drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
-          2025 – 2026 COHORT
-        </p>
+
+        {/* Metadata Footer */}
+        <div className="pt-4 border-t border-white/10">
+          <span className="font-mono text-[10px] sm:text-[11px] tracking-[0.22em] uppercase text-slate-400 drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
+            2025 — 2026 COHORT
+          </span>
+        </div>
       </div>
 
       {/* ========================================================================= */}
-      {/* CONTINUOUS HORIZONTAL TEAM COLUMNS: BIG | BIG | SMALL/SMALL | ...         */}
+      {/* CONTINUOUS HORIZONTAL EXHIBITION TRACK: BIG | BIG | SMALL/SMALL | ...      */}
       {/* ========================================================================= */}
       {TEAM_STRUCTURE.map((col) => {
+        // -----------------------------------------------------------------------
+        // LARGE PORTRAIT (President / Vice President)
+        // -----------------------------------------------------------------------
         if (col.type === "large") {
           const leader = col.members[0];
           return (
             <div
               key={col.id}
-              className="relative shrink-0 flex flex-col justify-end w-[240px] sm:w-[280px] lg:w-[320px] group"
+              className="relative shrink-0 flex flex-col justify-between w-[250px] sm:w-[290px] lg:w-[320px] h-[460px] sm:h-[500px] group"
             >
-              {/* Column Label */}
-              <div className="flex items-center gap-2 h-4 mb-2.5">
-                <span className="w-1 h-1 rounded-full bg-emerald-400/80" />
-                <span className="font-mono text-[9px] sm:text-[10px] font-semibold tracking-[0.2em] uppercase text-emerald-400 drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
-                  {col.label}
-                </span>
+              <div>
+                {/* Column Label */}
+                <div className="flex items-center gap-2 h-4 mb-2.5">
+                  <span className="w-1 h-1 rounded-full bg-emerald-400/80" />
+                  <span className="font-mono text-[9px] sm:text-[10px] font-semibold tracking-[0.2em] uppercase text-emerald-400 drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
+                    {col.label}
+                  </span>
+                </div>
+
+                {/* Large Editorial Exhibition Print */}
+                <StudioPhotoSurface
+                  name={leader.name}
+                  className="w-full h-[360px] sm:h-[395px] lg:h-[415px]"
+                />
               </div>
 
-              {/* Large Portrait (President / VP) */}
-              <StudioPortraitPlaceholder
-                initials={leader.initials}
-                aspectClass="aspect-[3/3.8] h-[340px] sm:h-[380px] lg:h-[420px]"
-              />
-
-              {/* Exhibition Caption */}
-              <div className="mt-3 text-left">
-                <h3 className="font-display text-xl sm:text-2xl text-slate-50 uppercase tracking-tight leading-tight group-hover:text-emerald-300 transition-colors drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)]">
+              {/* Exhibition Caption Directly Below */}
+              <div className="pt-2.5 text-left">
+                <h3 className="font-display text-lg sm:text-xl text-slate-50 uppercase tracking-tight leading-tight group-hover:text-emerald-300 transition-colors drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)]">
                   {leader.name}
                 </h3>
-                <p className="font-mono text-[11px] sm:text-xs text-emerald-400/90 font-medium tracking-wide mt-0.5 drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]">
+                <p className="font-mono text-[10px] sm:text-[11px] text-slate-400 font-medium tracking-wide mt-0.5 drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]">
                   {leader.role}
                 </p>
               </div>
@@ -277,11 +284,13 @@ export default function TeamWallSection() {
           );
         }
 
-        // Standard Stacked Columns (Two 1x1 Portraits)
+        // -----------------------------------------------------------------------
+        // STACKED 1x1 PORTRAIT COLUMNS (Two equal square prints per column)
+        // -----------------------------------------------------------------------
         return (
           <div
             key={col.id}
-            className="relative shrink-0 flex flex-col justify-end w-[170px] sm:w-[190px] lg:w-[210px]"
+            className="relative shrink-0 flex flex-col justify-between w-[165px] sm:w-[185px] lg:w-[205px] h-[460px] sm:h-[500px]"
           >
             {/* Column Label */}
             <div className="flex items-center gap-2 h-4 mb-2.5">
@@ -291,22 +300,22 @@ export default function TeamWallSection() {
               </span>
             </div>
 
-            {/* Stacked 1x1 Portraits Container */}
-            <div className="flex flex-col gap-5 sm:gap-6 justify-between">
+            {/* Stacked 1x1 Prints Container sharing identical vertical grid */}
+            <div className="flex flex-col justify-between h-[425px] sm:h-[465px]">
               {col.members.map((member) => (
-                <div key={member.name} className="group text-left">
-                  {/* 1x1 Square Portrait */}
-                  <StudioPortraitPlaceholder
-                    initials={member.initials}
-                    aspectClass="aspect-square w-full"
+                <div key={member.name} className="group text-left flex flex-col justify-between">
+                  {/* 1x1 Square Exhibition Print */}
+                  <StudioPhotoSurface
+                    name={member.name}
+                    className="w-full aspect-square"
                   />
 
-                  {/* Exhibition Caption */}
-                  <div className="mt-2">
-                    <h4 className="font-display text-base sm:text-lg text-slate-100 uppercase tracking-tight leading-snug group-hover:text-emerald-300 transition-colors drop-shadow-[0_2px_6px_rgba(0,0,0,0.95)] truncate">
+                  {/* Exhibition Caption Directly Below */}
+                  <div className="pt-1.5">
+                    <h4 className="font-display text-[14px] sm:text-[15px] text-slate-100 uppercase tracking-tight leading-snug group-hover:text-emerald-300 transition-colors drop-shadow-[0_2px_6px_rgba(0,0,0,0.95)] truncate">
                       {member.name}
                     </h4>
-                    <p className="font-mono text-[10px] sm:text-[11px] text-slate-300/85 tracking-tight mt-0.5 drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] truncate">
+                    <p className="font-mono text-[9px] sm:text-[10px] text-slate-400 tracking-tight mt-0.5 drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] truncate">
                       {member.role}
                     </p>
                   </div>
