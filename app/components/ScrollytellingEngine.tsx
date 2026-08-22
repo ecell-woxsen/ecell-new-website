@@ -69,8 +69,8 @@ const getDynamicSensitivity = (frame: number): number => {
   return 0.10;
 };
 
-// Very Low Friction (Near-Frictionless, Ultra-Buttery Momentum Drift)
-const getDynamicFriction = (frame: number): number => {
+// Dynamic Friction with Non-Linear Tail Compression for Buttery Stops
+const getDynamicFriction = (frame: number, velocity: number): number => {
   const isReadingZone =
     frame <= 15 ||
     (frame >= 368 && frame <= 395) ||
@@ -78,10 +78,16 @@ const getDynamicFriction = (frame: number): number => {
     (frame >= 810 && frame <= 930) ||
     frame >= 1000;
 
-  if (isReadingZone) {
-    return 0.92; // Low friction inside reading zones for smooth, unhurried drifting
+  const baseFriction = isReadingZone ? 0.92 : 0.95;
+  const absV = Math.abs(velocity);
+
+  // When decelerating to a stop, compress the slow-motion tail to eliminate 24fps stutter
+  if (absV < 0.25) {
+    const t = absV / 0.25;
+    return 0.78 + t * (baseFriction - 0.78);
   }
-  return 0.95; // Ultra-low friction in transits for frictionless cinematic glide
+
+  return baseFriction;
 };
 
 export default function ScrollytellingEngine({
@@ -107,7 +113,8 @@ export default function ScrollytellingEngine({
   const velocityRef = useRef(0);
   const targetNavFrameRef = useRef<number | null>(null);
   const animFrameIdRef = useRef<number | null>(null);
-  const lastDrawnFrameRef = useRef<number | null>(null);
+  const lastDrawnFloatRef = useRef<number | null>(null);
+  const lastReportedFrameRef = useRef<number>(1);
   const touchStartYRef = useRef(0);
 
   // Helper to format frame number e.g. 1 -> "/ecell_shots/00001.webp"
@@ -130,7 +137,7 @@ export default function ScrollytellingEngine({
       img.onload = () => {
         framesCacheRef.current.set(idx, img);
         loadingSetRef.current.delete(idx);
-        const cur = Math.round(currentFrameRef.current);
+        const cur = currentFrameRef.current;
         if (Math.abs(cur - idx) <= 2) {
           drawFrameToCanvas(cur);
         }
@@ -145,8 +152,9 @@ export default function ScrollytellingEngine({
   // Priority window loader ahead of scroll trajectory
   const preloadPriorityWindow = useCallback(
     (centerFrame: number) => {
-      const start = Math.max(1, centerFrame - 35);
-      const end = Math.min(TOTAL_FRAMES, centerFrame + 75);
+      const center = Math.round(centerFrame);
+      const start = Math.max(1, center - 35);
+      const end = Math.min(TOTAL_FRAMES, center + 75);
       for (let i = start; i <= end; i++) {
         requestFrame(i);
       }
@@ -154,24 +162,29 @@ export default function ScrollytellingEngine({
     [requestFrame]
   );
 
-  // Canvas drawing function with DPI scaling and nearest loaded frame fallback
-  const drawFrameToCanvas = useCallback((frameIdx: number) => {
+  // Canvas drawing function with Sub-Frame Alpha Cross-Fading (Temporal Interpolation)
+  const drawFrameToCanvas = useCallback((frameFloat: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    let img = framesCacheRef.current.get(frameIdx);
+    const clamped = Math.min(TOTAL_FRAMES, Math.max(1, frameFloat));
+    const frameA = Math.floor(clamped);
+    const frameB = Math.min(TOTAL_FRAMES, frameA + 1);
+    const blendAlpha = clamped - frameA;
+
+    let imgA = framesCacheRef.current.get(frameA);
 
     // If exact frame is still loading, request it and fallback to nearest cached frame
-    if (!img) {
-      requestFrame(frameIdx);
+    if (!imgA) {
+      requestFrame(frameA);
 
       let closestFrame = -1;
       let minDistance = Infinity;
 
       for (const cachedIdx of framesCacheRef.current.keys()) {
-        const dist = Math.abs(cachedIdx - frameIdx);
+        const dist = Math.abs(cachedIdx - frameA);
         if (dist < minDistance) {
           minDistance = dist;
           closestFrame = cachedIdx;
@@ -179,12 +192,21 @@ export default function ScrollytellingEngine({
       }
 
       if (closestFrame !== -1) {
-        img = framesCacheRef.current.get(closestFrame);
+        imgA = framesCacheRef.current.get(closestFrame);
       }
     }
 
-    if (!img || !img.complete || img.naturalWidth === 0) {
+    if (!imgA || !imgA.complete || imgA.naturalWidth === 0) {
       return;
+    }
+
+    // Pre-request frameB if blend is significant
+    let imgB: HTMLImageElement | undefined;
+    if (blendAlpha > 0.005 && frameB !== frameA) {
+      imgB = framesCacheRef.current.get(frameB);
+      if (!imgB) {
+        requestFrame(frameB);
+      }
     }
 
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -201,8 +223,8 @@ export default function ScrollytellingEngine({
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    const imgWidth = img.naturalWidth || img.width;
-    const imgHeight = img.naturalHeight || img.height;
+    const imgWidth = imgA.naturalWidth || imgA.width;
+    const imgHeight = imgA.naturalHeight || imgA.height;
     if (!imgWidth || !imgHeight) return;
 
     const imgRatio = imgWidth / imgHeight;
@@ -223,8 +245,18 @@ export default function ScrollytellingEngine({
       offsetX = (width - drawW) / 2;
     }
 
-    ctx.drawImage(img, offsetX, offsetY, drawW, drawH);
-    lastDrawnFrameRef.current = frameIdx;
+    // 1. Draw primary base frame
+    ctx.globalAlpha = 1.0;
+    ctx.drawImage(imgA, offsetX, offsetY, drawW, drawH);
+
+    // 2. Cross-dissolve next frame on top at display refresh rate (60/120fps)
+    if (blendAlpha > 0.005 && imgB && imgB.complete && imgB.naturalWidth > 0) {
+      ctx.globalAlpha = blendAlpha;
+      ctx.drawImage(imgB, offsetX, offsetY, drawW, drawH);
+      ctx.globalAlpha = 1.0;
+    }
+
+    lastDrawnFloatRef.current = clamped;
   }, [requestFrame]);
 
   // Initial critical preload on mount
@@ -374,10 +406,11 @@ export default function ScrollytellingEngine({
     };
   }, [preloadPriorityWindow]);
 
-  // 60/120 FPS Ultra-Low Friction Physics Simulation Loop
+  // 60/120 FPS Ultra-Low Friction Physics Simulation Loop with Sub-Frame Cross-Fading
   useEffect(() => {
     const renderLoop = () => {
       let current = currentFrameRef.current;
+      let hasMovement = false;
 
       // 1. Programmatic Navigation Target Animation (Navbar jumps)
       if (targetNavFrameRef.current !== null) {
@@ -386,24 +419,27 @@ export default function ScrollytellingEngine({
 
         if (Math.abs(diff) > 0.08) {
           current += diff * 0.10;
+          hasMovement = true;
         } else {
           current = target;
           targetNavFrameRef.current = null;
+          hasMovement = true;
           if (onNavigationComplete) {
             onNavigationComplete();
           }
         }
       }
 
-      // 2. Physics-based Velocity Integration with Ultra-Low Friction
-      if (Math.abs(velocityRef.current) > 0.001) {
+      // 2. Physics-based Velocity Integration with Adaptive Non-Linear Deceleration
+      if (Math.abs(velocityRef.current) > 0.0005) {
         current += velocityRef.current;
+        hasMovement = true;
 
-        const friction = getDynamicFriction(current);
+        const friction = getDynamicFriction(current, velocityRef.current);
         velocityRef.current *= friction;
 
-        // Clean seamless cutoff
-        if (Math.abs(velocityRef.current) < 0.015) {
+        // Clean, buttery cutoff to eliminate 24fps lag tail
+        if (Math.abs(velocityRef.current) < 0.02) {
           velocityRef.current = 0;
         }
       }
@@ -423,15 +459,22 @@ export default function ScrollytellingEngine({
       const vOpacity = Math.max(0, 1 - (current - 1) / 14);
       setVideoOpacity(vOpacity);
 
-      // 5. Canvas Render Update
-      const roundedFrame = Math.round(current);
-      if (roundedFrame !== lastDrawnFrameRef.current) {
-        drawFrameToCanvas(roundedFrame);
+      // 5. Canvas Render Update with Sub-Frame Temporal Interpolation
+      const lastDrawn = lastDrawnFloatRef.current;
+      const deltaSinceLastDraw = lastDrawn === null ? Infinity : Math.abs(current - lastDrawn);
+
+      if (hasMovement || deltaSinceLastDraw > 0.005) {
+        drawFrameToCanvas(current);
       }
 
-      setCurrentFrame(roundedFrame);
-      if (onFrameUpdate) {
-        onFrameUpdate(roundedFrame);
+      // 6. Notify React overlays on integer transitions
+      const roundedFrame = Math.round(current);
+      if (roundedFrame !== lastReportedFrameRef.current) {
+        lastReportedFrameRef.current = roundedFrame;
+        setCurrentFrame(roundedFrame);
+        if (onFrameUpdate) {
+          onFrameUpdate(roundedFrame);
+        }
       }
 
       animFrameIdRef.current = requestAnimationFrame(renderLoop);
@@ -449,8 +492,7 @@ export default function ScrollytellingEngine({
   // Resize handler
   useEffect(() => {
     const handleResize = () => {
-      const rounded = Math.round(currentFrameRef.current);
-      drawFrameToCanvas(rounded);
+      drawFrameToCanvas(currentFrameRef.current);
     };
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
