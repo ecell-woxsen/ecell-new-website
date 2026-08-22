@@ -13,10 +13,10 @@ interface ScrollytellingEngineProps {
   onNavigationComplete?: () => void;
 }
 
-const TOTAL_FRAMES = 1078;
+const TOTAL_FRAMES = 840;
 const CRITICAL_PRELOAD_COUNT = 60;
 
-// Dynamic Sensitivity Curve calibrated for 1078 total frames
+// Dynamic Sensitivity Curve calibrated for 840 total frames
 const getDynamicSensitivity = (frame: number): number => {
   // Hero Landing (Frames 1 - 15) -> Slow, calm drift
   if (frame <= 15) {
@@ -44,28 +44,28 @@ const getDynamicSensitivity = (frame: number): number => {
   if (frame > 420 && frame < 600) {
     return 0.22;
   }
-  // Deceleration into Wall Gallery (Frames 600 - 635)
-  if (frame >= 600 && frame < 635) {
-    const t = (frame - 600) / 35;
+  // Deceleration into Wall Gallery (Frames 600 - 618)
+  if (frame >= 600 && frame < 618) {
+    const t = (frame - 600) / 18;
     return 0.22 - t * 0.12;
   }
-  // Milestone 2A: Flagship Events (Frames 635 - 730) -> Slow reading pace
-  if (frame >= 635 && frame <= 730) {
+  // Milestone 2A: Flagship Events (Frames 618 - 665) -> Slow reading pace
+  if (frame >= 618 && frame <= 665) {
     return 0.10;
   }
-  // Transit between Events and Team (Frames 730 - 810) -> Gentle glide
-  if (frame > 730 && frame < 810) {
+  // Transit between Events and Team (Frames 665 - 705) -> Gentle glide
+  if (frame > 665 && frame < 705) {
     return 0.20;
   }
-  // Milestone 2B: Core Team Leadership (Frames 810 - 930) -> Slow reading pace
-  if (frame >= 810 && frame <= 930) {
+  // Milestone 2B: Core Team Leadership (Frames 705 - 765) -> Slow reading pace
+  if (frame >= 705 && frame <= 765) {
     return 0.10;
   }
-  // Transit between Team and Contact (Frames 930 - 1000) -> Gentle glide
-  if (frame > 930 && frame < 1000) {
+  // Transit between Team and Contact (Frames 765 - 800) -> Gentle glide
+  if (frame > 765 && frame < 800) {
     return 0.20;
   }
-  // Milestone 2C: Contact & Application (Frames 1000 - 1078) -> Slow reading pace
+  // Milestone 2C: Contact & Application (Frames 800 - 840) -> Slow reading pace
   return 0.10;
 };
 
@@ -74,9 +74,9 @@ const getDynamicFriction = (frame: number, velocity: number): number => {
   const isReadingZone =
     frame <= 15 ||
     (frame >= 368 && frame <= 395) ||
-    (frame >= 635 && frame <= 730) ||
-    (frame >= 810 && frame <= 930) ||
-    frame >= 1000;
+    (frame >= 618 && frame <= 665) ||
+    (frame >= 705 && frame <= 765) ||
+    frame >= 800;
 
   const baseFriction = isReadingZone ? 0.92 : 0.95;
   const absV = Math.abs(velocity);
@@ -499,8 +499,8 @@ export default function ScrollytellingEngine({
   }, [drawFrameToCanvas]);
 
   const handleExploreEvents = () => {
-    targetNavFrameRef.current = 675;
-    preloadPriorityWindow(675);
+    targetNavFrameRef.current = 638;
+    preloadPriorityWindow(638);
   };
 
   return (
@@ -553,7 +553,7 @@ export default function ScrollytellingEngine({
           onOpenJoinModal={onOpenJoinModal}
         />
 
-        {/* Overlay 3: Wall Gallery (Frames 605 - 1078) */}
+        {/* Overlay 3: Wall Gallery (Frames 603 - 840) */}
         <WallGalleryOverlay
           currentFrame={currentFrame}
           onOpenJoinModal={onOpenJoinModal}

@@ -16,11 +16,11 @@ export default function WallGalleryOverlay({
 }: WallGalleryOverlayProps) {
   const [renderScale, setRenderScale] = useState(1);
 
-  // Active range for the 60fps sequence: frames 605 to 1078
+  // Active range for the sequence: frames 603 to 840
   let opacity = 0;
-  if (currentFrame >= 605 && currentFrame < 635) {
-    opacity = (currentFrame - 605) / 30;
-  } else if (currentFrame >= 635) {
+  if (currentFrame >= 603 && currentFrame < 618) {
+    opacity = (currentFrame - 603) / 15;
+  } else if (currentFrame >= 618) {
     opacity = 1;
   }
 
@@ -35,10 +35,10 @@ export default function WallGalleryOverlay({
     return () => window.removeEventListener("resize", updateScale);
   }, []);
 
-  // Physical 1:1 camera tracking math for 600-1078 (478 interpolated 60fps frames):
-  // Total optical pan is ~1268px spread across 478 frames = 2.65px per frame in 1280x720 video space.
-  const frameOffset = Math.max(0, currentFrame - 615);
-  const pxPerFrame = 2.65;
+  // Physical 1:1 camera tracking math for 600-840 (241 frames):
+  // Total optical pan is ~1268px spread across 240 frames = 5.30px per frame in 1280x720 video space.
+  const frameOffset = Math.max(0, currentFrame - 608);
+  const pxPerFrame = 5.30;
   const translateX = -(frameOffset * pxPerFrame * renderScale);
 
   return (
