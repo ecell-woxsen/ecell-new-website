@@ -71,16 +71,14 @@ export default function EventsWallSection({
             }}
           >
             {/* ========================================================================= */}
-            {/* STUDIO SPOTLIGHT EFFECT                                                   */}
-            {/* Organic, soft radial illumination centered over the active event          */}
+            {/* INVISIBLE CINEMATIC AMBIENT ILLUMINATION                                  */}
+            {/* Seamless, ultra-diffused light falloff: zero visible circles or bubbles   */}
             {/* ========================================================================= */}
             <div
-              className="absolute -top-16 -left-16 sm:-left-20 w-[540px] sm:w-[660px] h-[520px] sm:h-[620px] pointer-events-none rounded-full transition-opacity duration-300"
+              className="absolute -top-28 -left-28 w-[900px] h-[750px] pointer-events-none blur-3xl rounded-full transition-opacity duration-500"
               style={{
-                opacity: spotlightOpacity,
-                background: `
-                  radial-gradient(circle at 38% 30%, rgba(255, 255, 255, 0.08) 0%, rgba(5, 8, 14, 0.48) 44%, rgba(5, 8, 14, 0) 76%)
-                `,
+                opacity: spotlightOpacity * 0.5,
+                background: `radial-gradient(ellipse at 40% 35%, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 40%, transparent 75%)`,
               }}
               aria-hidden="true"
             />
