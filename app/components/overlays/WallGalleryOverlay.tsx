@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useRef } from "react";
 import EventsWallSection from "./EventsWallSection";
-import TeamWallCards from "./TeamWallCards";
+import TeamWallSection from "./TeamWallSection";
 import ContactWallCard from "./ContactWallCard";
 
 interface WallGalleryOverlayProps {
@@ -16,7 +16,7 @@ function WallGalleryOverlay({
 }: WallGalleryOverlayProps) {
   const [renderScale, setRenderScale] = useState(1);
   const trackRef = useRef<HTMLDivElement>(null);
-  const [maxScrollWidth, setMaxScrollWidth] = useState(2400);
+  const [maxScrollWidth, setMaxScrollWidth] = useState(3200);
 
   // Active range for the sequence: frames 603 to 1262
   let opacity = 0;
@@ -33,7 +33,7 @@ function WallGalleryOverlay({
       if (trackRef.current) {
         const totalWidth = trackRef.current.scrollWidth;
         const viewWidth = window.innerWidth;
-        setMaxScrollWidth(Math.max(0, totalWidth - viewWidth + 180 * scale));
+        setMaxScrollWidth(Math.max(0, totalWidth - viewWidth + 240 * scale));
       }
     };
 
@@ -70,9 +70,9 @@ function WallGalleryOverlay({
         {/* Section 1: Flagship Initiatives & Events (3 Sequential Chapters with Studio Spotlight) */}
         <EventsWallSection currentFrame={currentFrame} onOpenJoinModal={onOpenJoinModal} />
 
-        {/* Section 2: Core Team Leadership */}
+        {/* Section 2: Core Team Leadership (Exact BIG | BIG | SMALL/SMALL continuous exhibition) */}
         <div className="shrink-0">
-          <TeamWallCards />
+          <TeamWallSection />
         </div>
 
         {/* Section 3: Connect & Application Form */}
