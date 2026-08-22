@@ -8,7 +8,7 @@ interface ScrollProgressHUDProps {
   totalFrames: number;
 }
 
-export default function ScrollProgressHUD({
+function ScrollProgressHUD({
   currentFrame,
   totalFrames,
 }: ScrollProgressHUDProps) {
@@ -67,3 +67,9 @@ export default function ScrollProgressHUD({
     </div>
   );
 }
+
+export default React.memo(ScrollProgressHUD, (prevProps, nextProps) => {
+  const prevPct = Math.round((prevProps.currentFrame / prevProps.totalFrames) * 100);
+  const nextPct = Math.round((nextProps.currentFrame / nextProps.totalFrames) * 100);
+  return prevPct === nextPct;
+});

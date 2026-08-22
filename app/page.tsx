@@ -23,7 +23,7 @@ export default function Home() {
   };
 
   return (
-    <main className="fixed inset-0 w-screen h-screen overflow-hidden bg-[#040608] text-slate-100 selection:bg-emerald-500/30 selection:text-emerald-200">
+    <main className="relative bg-[#040608] text-slate-100 selection:bg-emerald-500/30 selection:text-emerald-200 min-h-screen">
       {/* Floating Header */}
       <Header
         currentFrame={currentFrame}
@@ -31,12 +31,13 @@ export default function Home() {
         onOpenJoinModal={() => setIsJoinModalOpen(true)}
       />
 
-      {/* Main Scrollytelling Engine with Y-axis Virtual Scroll Lock */}
+      {/* Main Scrollytelling Engine with Lenis Smooth Scroll */}
       <ScrollytellingEngine
         onFrameUpdate={handleFrameUpdate}
         onOpenJoinModal={() => setIsJoinModalOpen(true)}
         targetNavigationFrame={targetNavigationFrame}
         onNavigationComplete={handleNavigationComplete}
+        isJoinModalOpen={isJoinModalOpen}
       />
 
       {/* Application / Ideas Modal */}

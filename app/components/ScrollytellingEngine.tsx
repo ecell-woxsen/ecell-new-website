@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useRef, useEffect, useState, useCallback } from "react";
+import Lenis from "lenis";
 import PreloadManager from "./PreloadManager";
 import HeroOverlay from "./overlays/HeroOverlay";
 import DoorAboutOverlay from "./overlays/DoorAboutOverlay";
@@ -11,94 +12,24 @@ interface ScrollytellingEngineProps {
   onOpenJoinModal: () => void;
   targetNavigationFrame?: number | null;
   onNavigationComplete?: () => void;
+  isJoinModalOpen?: boolean;
 }
 
 const TOTAL_FRAMES = 840;
 const CRITICAL_PRELOAD_COUNT = 60;
-
-// Dynamic Sensitivity Curve calibrated for 840 total frames
-const getDynamicSensitivity = (frame: number): number => {
-  // Hero Landing (Frames 1 - 15) -> Slow, calm drift
-  if (frame <= 15) {
-    return 0.10;
-  }
-  // Act 1 Transit: Campus approach (Frames 15 - 345) -> Gentle, steady glide
-  if (frame < 345) {
-    return 0.22;
-  }
-  // Deceleration into Door Threshold (Frames 345 - 368)
-  if (frame >= 345 && frame < 368) {
-    const t = (frame - 345) / 23;
-    return 0.22 - t * 0.14;
-  }
-  // Milestone 1: About E-Cell Door Scene (Frames 368 - 395) -> Slow reading drift
-  if (frame >= 368 && frame <= 395) {
-    return 0.08;
-  }
-  // Acceleration out of Door into Boardroom (Frames 395 - 420)
-  if (frame > 395 && frame <= 420) {
-    const t = (frame - 395) / 25;
-    return 0.08 + t * 0.14;
-  }
-  // Act 2 Transit: Boardroom Traversal (Frames 420 - 600) -> Gentle, steady glide
-  if (frame > 420 && frame < 600) {
-    return 0.22;
-  }
-  // Deceleration into Wall Gallery (Frames 600 - 618)
-  if (frame >= 600 && frame < 618) {
-    const t = (frame - 600) / 18;
-    return 0.22 - t * 0.12;
-  }
-  // Milestone 2A: Flagship Events (Frames 618 - 665) -> Slow reading pace
-  if (frame >= 618 && frame <= 665) {
-    return 0.10;
-  }
-  // Transit between Events and Team (Frames 665 - 705) -> Gentle glide
-  if (frame > 665 && frame < 705) {
-    return 0.20;
-  }
-  // Milestone 2B: Core Team Leadership (Frames 705 - 765) -> Slow reading pace
-  if (frame >= 705 && frame <= 765) {
-    return 0.10;
-  }
-  // Transit between Team and Contact (Frames 765 - 800) -> Gentle glide
-  if (frame > 765 && frame < 800) {
-    return 0.20;
-  }
-  // Milestone 2C: Contact & Application (Frames 800 - 840) -> Slow reading pace
-  return 0.10;
-};
-
-// Dynamic Friction with Non-Linear Tail Compression for Buttery Stops
-const getDynamicFriction = (frame: number, velocity: number): number => {
-  const isReadingZone =
-    frame <= 15 ||
-    (frame >= 368 && frame <= 395) ||
-    (frame >= 618 && frame <= 665) ||
-    (frame >= 705 && frame <= 765) ||
-    frame >= 800;
-
-  const baseFriction = isReadingZone ? 0.92 : 0.95;
-  const absV = Math.abs(velocity);
-
-  // When decelerating to a stop, compress the slow-motion tail to eliminate 24fps stutter
-  if (absV < 0.25) {
-    const t = absV / 0.25;
-    return 0.78 + t * (baseFriction - 0.78);
-  }
-
-  return baseFriction;
-};
+const SCROLL_TRACK_HEIGHT = TOTAL_FRAMES * 12; // 10,080px scroll track for 1:1 frame pacing
 
 export default function ScrollytellingEngine({
   onFrameUpdate,
   onOpenJoinModal,
   targetNavigationFrame,
   onNavigationComplete,
+  isJoinModalOpen = false,
 }: ScrollytellingEngineProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const lenisRef = useRef<Lenis | null>(null);
 
   // Frames cache & loading tracking
   const framesCacheRef = useRef<Map<number, HTMLImageElement>>(new Map());
@@ -108,14 +39,12 @@ export default function ScrollytellingEngine({
   const [currentFrame, setCurrentFrame] = useState(1);
   const [videoOpacity, setVideoOpacity] = useState(1);
 
-  // Physics Velocity & Position tracking
+  // Rendering & window dimension refs
   const currentFrameRef = useRef(1);
-  const velocityRef = useRef(0);
-  const targetNavFrameRef = useRef<number | null>(null);
-  const animFrameIdRef = useRef<number | null>(null);
   const lastDrawnFloatRef = useRef<number | null>(null);
   const lastReportedFrameRef = useRef<number>(1);
-  const touchStartYRef = useRef(0);
+  const windowWidthRef = useRef(0);
+  const windowHeightRef = useRef(0);
 
   // Helper to format frame number e.g. 1 -> "/ecell_shots/00001.webp"
   const getFramePath = useCallback((frameNum: number) => {
@@ -124,7 +53,7 @@ export default function ScrollytellingEngine({
     return `/ecell_shots/${padded}.webp`;
   }, []);
 
-  // Request a single frame into memory
+  // Request a single frame into memory with off-main-thread image decoding
   const requestFrame = useCallback(
     (frameIdx: number) => {
       const idx = Math.min(TOTAL_FRAMES, Math.max(1, frameIdx));
@@ -137,14 +66,13 @@ export default function ScrollytellingEngine({
       img.onload = () => {
         framesCacheRef.current.set(idx, img);
         loadingSetRef.current.delete(idx);
-        const cur = currentFrameRef.current;
-        if (Math.abs(cur - idx) <= 2) {
-          drawFrameToCanvas(cur);
-        }
       };
       img.onerror = () => {
         loadingSetRef.current.delete(idx);
       };
+      if ("decode" in img && typeof img.decode === "function") {
+        img.decode().catch(() => {});
+      }
     },
     [getFramePath]
   );
@@ -162,102 +90,119 @@ export default function ScrollytellingEngine({
     [requestFrame]
   );
 
-  // Canvas drawing function with Sub-Frame Alpha Cross-Fading (Temporal Interpolation)
-  const drawFrameToCanvas = useCallback((frameFloat: number) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+  // Canvas drawing function with Sub-Frame Alpha Cross-Fading
+  const drawFrameToCanvas = useCallback(
+    (frameFloat: number) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
 
-    const clamped = Math.min(TOTAL_FRAMES, Math.max(1, frameFloat));
-    const frameA = Math.floor(clamped);
-    const frameB = Math.min(TOTAL_FRAMES, frameA + 1);
-    const blendAlpha = clamped - frameA;
+      const clamped = Math.min(TOTAL_FRAMES, Math.max(1, frameFloat));
+      const frameA = Math.floor(clamped);
+      const frameB = Math.min(TOTAL_FRAMES, frameA + 1);
+      const blendAlpha = clamped - frameA;
 
-    let imgA = framesCacheRef.current.get(frameA);
+      let imgA = framesCacheRef.current.get(frameA);
 
-    // If exact frame is still loading, request it and fallback to nearest cached frame
-    if (!imgA) {
-      requestFrame(frameA);
+      // Fallback to nearest cached frame if target frame is still fetching
+      if (!imgA) {
+        requestFrame(frameA);
 
-      let closestFrame = -1;
-      let minDistance = Infinity;
+        let closestFrame = -1;
+        let minDistance = Infinity;
 
-      for (const cachedIdx of framesCacheRef.current.keys()) {
-        const dist = Math.abs(cachedIdx - frameA);
-        if (dist < minDistance) {
-          minDistance = dist;
-          closestFrame = cachedIdx;
+        for (const cachedIdx of framesCacheRef.current.keys()) {
+          const dist = Math.abs(cachedIdx - frameA);
+          if (dist < minDistance) {
+            minDistance = dist;
+            closestFrame = cachedIdx;
+          }
+        }
+
+        if (closestFrame !== -1) {
+          imgA = framesCacheRef.current.get(closestFrame);
         }
       }
 
-      if (closestFrame !== -1) {
-        imgA = framesCacheRef.current.get(closestFrame);
+      if (!imgA || !imgA.complete || imgA.naturalWidth === 0) {
+        return;
       }
-    }
 
-    if (!imgA || !imgA.complete || imgA.naturalWidth === 0) {
-      return;
-    }
-
-    // Pre-request frameB if blend is significant
-    let imgB: HTMLImageElement | undefined;
-    if (blendAlpha > 0.005 && frameB !== frameA) {
-      imgB = framesCacheRef.current.get(frameB);
-      if (!imgB) {
-        requestFrame(frameB);
+      // Pre-request frameB if blend is significant
+      let imgB: HTMLImageElement | undefined;
+      if (blendAlpha > 0.005 && frameB !== frameA) {
+        imgB = framesCacheRef.current.get(frameB);
+        if (!imgB) {
+          requestFrame(frameB);
+        }
       }
-    }
 
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const width = window.innerWidth;
-    const height = window.innerHeight;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const width = windowWidthRef.current || window.innerWidth;
+      const height = windowHeightRef.current || window.innerHeight;
 
-    const targetWidth = Math.floor(width * dpr);
-    const targetHeight = Math.floor(height * dpr);
+      const targetWidth = Math.floor(width * dpr);
+      const targetHeight = Math.floor(height * dpr);
 
-    if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
-      canvas.width = targetWidth;
-      canvas.height = targetHeight;
-    }
+      if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+      }
 
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.imageSmoothingEnabled = true;
 
-    const imgWidth = imgA.naturalWidth || imgA.width;
-    const imgHeight = imgA.naturalHeight || imgA.height;
-    if (!imgWidth || !imgHeight) return;
+      const imgWidth = imgA.naturalWidth || imgA.width;
+      const imgHeight = imgA.naturalHeight || imgA.height;
+      if (!imgWidth || !imgHeight) return;
 
-    const imgRatio = imgWidth / imgHeight;
-    const canvasRatio = width / height;
+      const imgRatio = imgWidth / imgHeight;
+      const canvasRatio = width / height;
 
-    let drawW = width;
-    let drawH = height;
-    let offsetX = 0;
-    let offsetY = 0;
+      let drawW = width;
+      let drawH = height;
+      let offsetX = 0;
+      let offsetY = 0;
 
-    if (canvasRatio > imgRatio) {
-      drawW = width;
-      drawH = width / imgRatio;
-      offsetY = (height - drawH) / 2;
-    } else {
-      drawH = height;
-      drawW = height * imgRatio;
-      offsetX = (width - drawW) / 2;
-    }
+      if (canvasRatio > imgRatio) {
+        drawW = width;
+        drawH = width / imgRatio;
+        offsetY = (height - drawH) / 2;
+      } else {
+        drawH = height;
+        drawW = height * imgRatio;
+        offsetX = (width - drawW) / 2;
+      }
 
-    // 1. Draw primary base frame
-    ctx.globalAlpha = 1.0;
-    ctx.drawImage(imgA, offsetX, offsetY, drawW, drawH);
-
-    // 2. Cross-dissolve next frame on top at display refresh rate (60/120fps)
-    if (blendAlpha > 0.005 && imgB && imgB.complete && imgB.naturalWidth > 0) {
-      ctx.globalAlpha = blendAlpha;
-      ctx.drawImage(imgB, offsetX, offsetY, drawW, drawH);
+      // 1. Draw base frame
       ctx.globalAlpha = 1.0;
-    }
+      ctx.drawImage(imgA, offsetX, offsetY, drawW, drawH);
 
-    lastDrawnFloatRef.current = clamped;
-  }, [requestFrame]);
+      // 2. Cross-dissolve next frame for 120 FPS sub-frame smoothness
+      if (blendAlpha > 0.005 && imgB && imgB.complete && imgB.naturalWidth > 0) {
+        ctx.globalAlpha = blendAlpha;
+        ctx.drawImage(imgB, offsetX, offsetY, drawW, drawH);
+        ctx.globalAlpha = 1.0;
+      }
+
+      lastDrawnFloatRef.current = clamped;
+    },
+    [requestFrame]
+  );
+
+  // Resize handler caching window dimensions
+  useEffect(() => {
+    const updateDimensions = () => {
+      windowWidthRef.current = window.innerWidth;
+      windowHeightRef.current = window.innerHeight;
+      drawFrameToCanvas(currentFrameRef.current);
+    };
+
+    updateDimensions();
+    window.addEventListener("resize", updateDimensions);
+    return () => window.removeEventListener("resize", updateDimensions);
+  }, [drawFrameToCanvas]);
 
   // Initial critical preload on mount
   useEffect(() => {
@@ -316,159 +261,54 @@ export default function ScrollytellingEngine({
     };
   }, [getFramePath, requestFrame, drawFrameToCanvas]);
 
-  // Respond to programmatic header navigation
+  // Single Global Lenis Smooth Scroll Engine Instance & Synchronized RAF Loop
   useEffect(() => {
-    if (targetNavigationFrame !== null && targetNavigationFrame !== undefined) {
-      targetNavFrameRef.current = Math.min(TOTAL_FRAMES, Math.max(1, targetNavigationFrame));
-      velocityRef.current = 0;
-      preloadPriorityWindow(targetNavigationFrame);
-    }
-  }, [targetNavigationFrame, preloadPriorityWindow]);
+    if (!isReady) return;
 
-  // Physics Acceleration Wheel & Touch Interaction Listeners
-  useEffect(() => {
-    const handleWheel = (e: WheelEvent) => {
-      e.preventDefault();
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-      // Clear any programmatic jump when user actively scrolls
-      targetNavFrameRef.current = null;
+    const lenis = new Lenis({
+      duration: prefersReducedMotion ? 0 : 1.2,
+      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)), // Apple-style cubic easeOutExponential
+      orientation: "vertical",
+      gestureOrientation: "vertical",
+      smoothWheel: true,
+      wheelMultiplier: 1.0,
+      touchMultiplier: 1.5,
+      infinite: false,
+    });
 
-      const current = currentFrameRef.current;
-      const sensitivity = getDynamicSensitivity(current);
+    lenisRef.current = lenis;
 
-      // Gentle, slow impulse with low friction for long-lasting buttery drift
-      const impulse = e.deltaY * sensitivity * 0.028;
-      velocityRef.current += impulse;
+    let animFrameId: number;
 
-      // Controlled max velocity for steady, cinematic speed
-      const maxVelocity = 4.2;
-      velocityRef.current = Math.max(-maxVelocity, Math.min(maxVelocity, velocityRef.current));
+    const renderLoop = (time: number) => {
+      lenis.raf(time);
 
-      preloadPriorityWindow(Math.round(current + velocityRef.current * 20));
-    };
+      const scrollY = lenis.scroll;
+      const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+      const progress = maxScroll > 0 ? Math.min(1, Math.max(0, scrollY / maxScroll)) : 0;
 
-    const handleTouchStart = (e: TouchEvent) => {
-      if (e.touches.length > 0) {
-        touchStartYRef.current = e.touches[0].clientY;
-        velocityRef.current = 0;
-        targetNavFrameRef.current = null;
-      }
-    };
+      const frameFloat = 1 + progress * (TOTAL_FRAMES - 1);
+      currentFrameRef.current = frameFloat;
 
-    const handleTouchMove = (e: TouchEvent) => {
-      if (e.touches.length > 0) {
-        e.preventDefault();
-        const currentY = e.touches[0].clientY;
-        const deltaY = touchStartYRef.current - currentY;
-        touchStartYRef.current = currentY;
+      // Priority stream loader around current position
+      preloadPriorityWindow(frameFloat);
 
-        const current = currentFrameRef.current;
-        const sensitivity = getDynamicSensitivity(current);
-        const impulse = deltaY * sensitivity * 0.035;
-        velocityRef.current += impulse;
-
-        const maxVelocity = 4.2;
-        velocityRef.current = Math.max(-maxVelocity, Math.min(maxVelocity, velocityRef.current));
-
-        preloadPriorityWindow(Math.round(current + velocityRef.current * 20));
-      }
-    };
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      let impulse = 0;
-      const current = currentFrameRef.current;
-      const sensitivity = getDynamicSensitivity(current);
-
-      if (e.key === "ArrowDown" || e.key === "PageDown" || e.key === " ") {
-        impulse = 2.0 * sensitivity;
-      } else if (e.key === "ArrowUp" || e.key === "PageUp") {
-        impulse = -2.0 * sensitivity;
-      }
-
-      if (impulse !== 0) {
-        e.preventDefault();
-        targetNavFrameRef.current = null;
-        velocityRef.current += impulse;
-        preloadPriorityWindow(Math.round(current + velocityRef.current * 20));
-      }
-    };
-
-    window.addEventListener("wheel", handleWheel, { passive: false });
-    window.addEventListener("touchstart", handleTouchStart, { passive: true });
-    window.addEventListener("touchmove", handleTouchMove, { passive: false });
-    window.addEventListener("keydown", handleKeyDown, { passive: false });
-
-    return () => {
-      window.removeEventListener("wheel", handleWheel);
-      window.removeEventListener("touchstart", handleTouchStart);
-      window.removeEventListener("touchmove", handleTouchMove);
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [preloadPriorityWindow]);
-
-  // 60/120 FPS Ultra-Low Friction Physics Simulation Loop with Sub-Frame Cross-Fading
-  useEffect(() => {
-    const renderLoop = () => {
-      let current = currentFrameRef.current;
-      let hasMovement = false;
-
-      // 1. Programmatic Navigation Target Animation (Navbar jumps)
-      if (targetNavFrameRef.current !== null) {
-        const target = targetNavFrameRef.current;
-        const diff = target - current;
-
-        if (Math.abs(diff) > 0.08) {
-          current += diff * 0.10;
-          hasMovement = true;
-        } else {
-          current = target;
-          targetNavFrameRef.current = null;
-          hasMovement = true;
-          if (onNavigationComplete) {
-            onNavigationComplete();
-          }
-        }
-      }
-
-      // 2. Physics-based Velocity Integration with Adaptive Non-Linear Deceleration
-      if (Math.abs(velocityRef.current) > 0.0005) {
-        current += velocityRef.current;
-        hasMovement = true;
-
-        const friction = getDynamicFriction(current, velocityRef.current);
-        velocityRef.current *= friction;
-
-        // Clean, buttery cutoff to eliminate 24fps lag tail
-        if (Math.abs(velocityRef.current) < 0.02) {
-          velocityRef.current = 0;
-        }
-      }
-
-      // 3. Strict Boundary Clamping [1, TOTAL_FRAMES]
-      if (current < 1) {
-        current = 1;
-        velocityRef.current = 0;
-      } else if (current > TOTAL_FRAMES) {
-        current = TOTAL_FRAMES;
-        velocityRef.current = 0;
-      }
-
-      currentFrameRef.current = current;
-
-      // 4. Hero Video Crossfade calculation
-      const vOpacity = Math.max(0, 1 - (current - 1) / 14);
+      // Hero Video Crossfade calculation
+      const vOpacity = Math.max(0, 1 - (frameFloat - 1) / 14);
       setVideoOpacity(vOpacity);
 
-      // 5. Canvas Render Update with Sub-Frame Temporal Interpolation
+      // Canvas Render Update
       const lastDrawn = lastDrawnFloatRef.current;
-      const deltaSinceLastDraw = lastDrawn === null ? Infinity : Math.abs(current - lastDrawn);
+      const deltaSinceLastDraw = lastDrawn === null ? Infinity : Math.abs(frameFloat - lastDrawn);
 
-      if (hasMovement || deltaSinceLastDraw > 0.005) {
-        drawFrameToCanvas(current);
+      if (deltaSinceLastDraw > 0.005) {
+        drawFrameToCanvas(frameFloat);
       }
 
-      // 6. Notify React overlays on integer transitions
-      const roundedFrame = Math.round(current);
+      // Notify React overlays only on integer boundary transitions
+      const roundedFrame = Math.round(frameFloat);
       if (roundedFrame !== lastReportedFrameRef.current) {
         lastReportedFrameRef.current = roundedFrame;
         setCurrentFrame(roundedFrame);
@@ -477,30 +317,56 @@ export default function ScrollytellingEngine({
         }
       }
 
-      animFrameIdRef.current = requestAnimationFrame(renderLoop);
+      animFrameId = requestAnimationFrame(renderLoop);
     };
 
-    animFrameIdRef.current = requestAnimationFrame(renderLoop);
+    animFrameId = requestAnimationFrame(renderLoop);
 
     return () => {
-      if (animFrameIdRef.current) {
-        cancelAnimationFrame(animFrameIdRef.current);
-      }
+      cancelAnimationFrame(animFrameId);
+      lenis.destroy();
+      lenisRef.current = null;
     };
-  }, [drawFrameToCanvas, onFrameUpdate, onNavigationComplete]);
+  }, [isReady, drawFrameToCanvas, onFrameUpdate, preloadPriorityWindow]);
 
-  // Resize handler
+  // Pause / Resume Lenis scrolling when modal opens or closes
   useEffect(() => {
-    const handleResize = () => {
-      drawFrameToCanvas(currentFrameRef.current);
-    };
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, [drawFrameToCanvas]);
+    if (!lenisRef.current) return;
+    if (isJoinModalOpen) {
+      lenisRef.current.stop();
+    } else {
+      lenisRef.current.start();
+    }
+  }, [isJoinModalOpen]);
+
+  // Respond to programmatic header navigation
+  useEffect(() => {
+    if (targetNavigationFrame !== null && targetNavigationFrame !== undefined && lenisRef.current) {
+      const target = Math.min(TOTAL_FRAMES, Math.max(1, targetNavigationFrame));
+      const targetProgress = (target - 1) / (TOTAL_FRAMES - 1);
+      const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+      const targetScrollY = targetProgress * maxScroll;
+
+      preloadPriorityWindow(target);
+
+      lenisRef.current.scrollTo(targetScrollY, {
+        duration: 1.4,
+        easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+        onComplete: () => {
+          if (onNavigationComplete) {
+            onNavigationComplete();
+          }
+        },
+      });
+    }
+  }, [targetNavigationFrame, preloadPriorityWindow, onNavigationComplete]);
 
   const handleExploreEvents = () => {
-    targetNavFrameRef.current = 638;
-    preloadPriorityWindow(638);
+    if (lenisRef.current) {
+      const targetProgress = (638 - 1) / (TOTAL_FRAMES - 1);
+      const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+      lenisRef.current.scrollTo(targetProgress * maxScroll, { duration: 1.4 });
+    }
   };
 
   return (
@@ -508,10 +374,16 @@ export default function ScrollytellingEngine({
       {/* Frame Loading Screen */}
       <PreloadManager progress={loadProgress} isReady={isReady} />
 
-      {/* Fixed Viewport Container with Scroll Lock */}
+      {/* Scrollable Track Element mapping page height to total frames */}
+      <div
+        className="relative w-full pointer-events-none"
+        style={{ height: `${SCROLL_TRACK_HEIGHT}px` }}
+      />
+
+      {/* Fixed Viewport Container for Canvas & Interactive Overlays */}
       <div
         ref={containerRef}
-        className="fixed inset-0 w-screen h-screen overflow-hidden select-none bg-[#040608]"
+        className="fixed inset-0 w-screen h-screen overflow-hidden select-none bg-[#040608] z-0"
       >
         {/* HTML5 Scrollytelling Canvas */}
         <canvas
@@ -562,3 +434,4 @@ export default function ScrollytellingEngine({
     </>
   );
 }
+

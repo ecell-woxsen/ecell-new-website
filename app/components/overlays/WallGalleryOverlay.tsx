@@ -10,7 +10,7 @@ interface WallGalleryOverlayProps {
   onOpenJoinModal: () => void;
 }
 
-export default function WallGalleryOverlay({
+function WallGalleryOverlay({
   currentFrame,
   onOpenJoinModal,
 }: WallGalleryOverlayProps) {
@@ -76,3 +76,8 @@ export default function WallGalleryOverlay({
     </div>
   );
 }
+
+export default React.memo(WallGalleryOverlay, (prevProps, nextProps) => {
+  if (prevProps.currentFrame < 603 && nextProps.currentFrame < 603) return true;
+  return prevProps.currentFrame === nextProps.currentFrame;
+});

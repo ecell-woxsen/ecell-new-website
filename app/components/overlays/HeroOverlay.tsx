@@ -8,7 +8,7 @@ interface HeroOverlayProps {
   onOpenJoinModal?: () => void;
 }
 
-export default function HeroOverlay({
+function HeroOverlay({
   currentFrame,
   onExploreClick,
   onOpenJoinModal,
@@ -25,10 +25,10 @@ export default function HeroOverlay({
 
   return (
     <div
-      className="fixed inset-0 z-20 flex flex-col justify-center items-center px-6 sm:px-16 text-center pointer-events-none transition-opacity duration-300"
+      className="fixed inset-0 z-20 flex flex-col justify-center items-center px-6 sm:px-16 text-center pointer-events-none transition-opacity duration-300 will-change-transform"
       style={{
         opacity,
-        transform: `translateY(-${translateY}px)`,
+        transform: `translate3d(0, -${translateY}px, 0)`,
       }}
     >
       <div className="relative z-10 max-w-[880px] mx-auto flex flex-col items-center text-center px-4 pointer-events-auto">
@@ -114,3 +114,8 @@ export default function HeroOverlay({
     </div>
   );
 }
+
+export default React.memo(HeroOverlay, (prevProps, nextProps) => {
+  if (prevProps.currentFrame > 35 && nextProps.currentFrame > 35) return true;
+  return prevProps.currentFrame === nextProps.currentFrame;
+});

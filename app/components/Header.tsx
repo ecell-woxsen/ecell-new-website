@@ -10,7 +10,7 @@ interface HeaderProps {
   currentFrame: number;
 }
 
-export default function Header({
+function Header({
   onNavigateToFrame,
   onOpenJoinModal,
   currentFrame,
@@ -111,3 +111,24 @@ export default function Header({
     </header>
   );
 }
+
+export default React.memo(Header, (prevProps, nextProps) => {
+  const prevActiveAbout = prevProps.currentFrame >= 365 && prevProps.currentFrame < 430;
+  const nextActiveAbout = nextProps.currentFrame >= 365 && nextProps.currentFrame < 430;
+
+  const prevActiveEvents = prevProps.currentFrame >= 603 && prevProps.currentFrame < 685;
+  const nextActiveEvents = nextProps.currentFrame >= 603 && nextProps.currentFrame < 685;
+
+  const prevActiveTeam = prevProps.currentFrame >= 685 && prevProps.currentFrame < 780;
+  const nextActiveTeam = nextProps.currentFrame >= 685 && nextProps.currentFrame < 780;
+
+  const prevActiveCommunity = prevProps.currentFrame >= 780;
+  const nextActiveCommunity = nextProps.currentFrame >= 780;
+
+  return (
+    prevActiveAbout === nextActiveAbout &&
+    prevActiveEvents === nextActiveEvents &&
+    prevActiveTeam === nextActiveTeam &&
+    prevActiveCommunity === nextActiveCommunity
+  );
+});
