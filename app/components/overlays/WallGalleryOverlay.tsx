@@ -68,7 +68,7 @@ function WallGalleryOverlay({
         }}
       >
         {/* Section 1: Flagship Initiatives & Events (3 Sequential Chapters with Studio Spotlight) */}
-        <EventsWallSection onOpenJoinModal={onOpenJoinModal} />
+        <EventsWallSection currentFrame={currentFrame} onOpenJoinModal={onOpenJoinModal} />
 
         {/* Section 2: Core Team Leadership */}
         <div className="shrink-0">
