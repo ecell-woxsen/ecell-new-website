@@ -13,10 +13,10 @@ interface ScrollytellingEngineProps {
   onNavigationComplete?: () => void;
 }
 
-const TOTAL_FRAMES = 840;
+const TOTAL_FRAMES = 1078;
 const CRITICAL_PRELOAD_COUNT = 60;
 
-// Dynamic Sensitivity Curve for Slow, Gentle Cinematic Speed
+// Dynamic Sensitivity Curve calibrated for 1078 total frames
 const getDynamicSensitivity = (frame: number): number => {
   // Hero Landing (Frames 1 - 15) -> Slow, calm drift
   if (frame <= 15) {
@@ -31,7 +31,7 @@ const getDynamicSensitivity = (frame: number): number => {
     const t = (frame - 345) / 23;
     return 0.22 - t * 0.14;
   }
-  // Milestone 1: About E-Cell Door Scene (Frames 368 - 395) -> Slow, calm reading drift
+  // Milestone 1: About E-Cell Door Scene (Frames 368 - 395) -> Slow reading drift
   if (frame >= 368 && frame <= 395) {
     return 0.08;
   }
@@ -44,28 +44,28 @@ const getDynamicSensitivity = (frame: number): number => {
   if (frame > 420 && frame < 600) {
     return 0.22;
   }
-  // Deceleration into Wall Gallery (Frames 600 - 620)
-  if (frame >= 600 && frame < 620) {
-    const t = (frame - 600) / 20;
+  // Deceleration into Wall Gallery (Frames 600 - 635)
+  if (frame >= 600 && frame < 635) {
+    const t = (frame - 600) / 35;
     return 0.22 - t * 0.12;
   }
-  // Milestone 2A: Flagship Events (Frames 620 - 660) -> Slow reading pace
-  if (frame >= 620 && frame <= 660) {
+  // Milestone 2A: Flagship Events (Frames 635 - 730) -> Slow reading pace
+  if (frame >= 635 && frame <= 730) {
     return 0.10;
   }
-  // Transit between Events and Team (Frames 660 - 705) -> Gentle glide
-  if (frame > 660 && frame < 705) {
-    return 0.18;
+  // Transit between Events and Team (Frames 730 - 810) -> Gentle glide
+  if (frame > 730 && frame < 810) {
+    return 0.20;
   }
-  // Milestone 2B: Core Team Leadership (Frames 705 - 750) -> Slow reading pace
-  if (frame >= 705 && frame <= 750) {
+  // Milestone 2B: Core Team Leadership (Frames 810 - 930) -> Slow reading pace
+  if (frame >= 810 && frame <= 930) {
     return 0.10;
   }
-  // Transit between Team and Contact (Frames 750 - 790) -> Gentle glide
-  if (frame > 750 && frame < 790) {
-    return 0.18;
+  // Transit between Team and Contact (Frames 930 - 1000) -> Gentle glide
+  if (frame > 930 && frame < 1000) {
+    return 0.20;
   }
-  // Milestone 2C: Contact & Application (Frames 790 - 840) -> Slow reading pace
+  // Milestone 2C: Contact & Application (Frames 1000 - 1078) -> Slow reading pace
   return 0.10;
 };
 
@@ -74,12 +74,12 @@ const getDynamicFriction = (frame: number): number => {
   const isReadingZone =
     frame <= 15 ||
     (frame >= 368 && frame <= 395) ||
-    (frame >= 620 && frame <= 660) ||
-    (frame >= 705 && frame <= 750) ||
-    frame >= 790;
+    (frame >= 635 && frame <= 730) ||
+    (frame >= 810 && frame <= 930) ||
+    frame >= 1000;
 
   if (isReadingZone) {
-    return 0.92; // Very low friction inside reading zones for smooth, unhurried drifting
+    return 0.92; // Low friction inside reading zones for smooth, unhurried drifting
   }
   return 0.95; // Ultra-low friction in transits for frictionless cinematic glide
 };
@@ -145,8 +145,8 @@ export default function ScrollytellingEngine({
   // Priority window loader ahead of scroll trajectory
   const preloadPriorityWindow = useCallback(
     (centerFrame: number) => {
-      const start = Math.max(1, centerFrame - 30);
-      const end = Math.min(TOTAL_FRAMES, centerFrame + 60);
+      const start = Math.max(1, centerFrame - 35);
+      const end = Math.min(TOTAL_FRAMES, centerFrame + 75);
       for (let i = start; i <= end; i++) {
         requestFrame(i);
       }
@@ -265,9 +265,9 @@ export default function ScrollytellingEngine({
 
       // Background stream remaining frames progressively
       const streamRemaining = async () => {
-        for (let i = CRITICAL_PRELOAD_COUNT + 1; i <= TOTAL_FRAMES; i += 20) {
+        for (let i = CRITICAL_PRELOAD_COUNT + 1; i <= TOTAL_FRAMES; i += 25) {
           if (isCancelled) break;
-          for (let j = i; j < i + 20 && j <= TOTAL_FRAMES; j++) {
+          for (let j = i; j < i + 25 && j <= TOTAL_FRAMES; j++) {
             requestFrame(j);
           }
           await new Promise((r) => setTimeout(r, 16));
@@ -312,7 +312,7 @@ export default function ScrollytellingEngine({
       const maxVelocity = 4.2;
       velocityRef.current = Math.max(-maxVelocity, Math.min(maxVelocity, velocityRef.current));
 
-      preloadPriorityWindow(Math.round(current + velocityRef.current * 18));
+      preloadPriorityWindow(Math.round(current + velocityRef.current * 20));
     };
 
     const handleTouchStart = (e: TouchEvent) => {
@@ -338,7 +338,7 @@ export default function ScrollytellingEngine({
         const maxVelocity = 4.2;
         velocityRef.current = Math.max(-maxVelocity, Math.min(maxVelocity, velocityRef.current));
 
-        preloadPriorityWindow(Math.round(current + velocityRef.current * 18));
+        preloadPriorityWindow(Math.round(current + velocityRef.current * 20));
       }
     };
 
@@ -357,7 +357,7 @@ export default function ScrollytellingEngine({
         e.preventDefault();
         targetNavFrameRef.current = null;
         velocityRef.current += impulse;
-        preloadPriorityWindow(Math.round(current + velocityRef.current * 18));
+        preloadPriorityWindow(Math.round(current + velocityRef.current * 20));
       }
     };
 
@@ -457,8 +457,8 @@ export default function ScrollytellingEngine({
   }, [drawFrameToCanvas]);
 
   const handleExploreEvents = () => {
-    targetNavFrameRef.current = 640;
-    preloadPriorityWindow(640);
+    targetNavFrameRef.current = 675;
+    preloadPriorityWindow(675);
   };
 
   return (
@@ -511,7 +511,7 @@ export default function ScrollytellingEngine({
           onOpenJoinModal={onOpenJoinModal}
         />
 
-        {/* Overlay 3: Wall Gallery (Frames 605 - 840) */}
+        {/* Overlay 3: Wall Gallery (Frames 605 - 1078) */}
         <WallGalleryOverlay
           currentFrame={currentFrame}
           onOpenJoinModal={onOpenJoinModal}
