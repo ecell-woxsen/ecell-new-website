@@ -18,10 +18,10 @@ function Header({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navItems = [
-    { label: "ABOUT", frame: 378, active: currentFrame >= 365 && currentFrame < 430 },
-    { label: "EVENTS", frame: 638, active: currentFrame >= 603 && currentFrame < 685 },
-    { label: "TEAM", frame: 733, active: currentFrame >= 685 && currentFrame < 780 },
-    { label: "COMMUNITY", frame: 820, active: currentFrame >= 780 },
+    { label: "ABOUT", frame: 378, active: currentFrame >= 365 && currentFrame < 450 },
+    { label: "EVENTS", frame: 680, active: currentFrame >= 603 && currentFrame < 840 },
+    { label: "TEAM", frame: 940, active: currentFrame >= 840 && currentFrame < 1090 },
+    { label: "COMMUNITY", frame: 1180, active: currentFrame >= 1090 },
   ];
 
   return (
@@ -113,17 +113,17 @@ function Header({
 }
 
 export default React.memo(Header, (prevProps, nextProps) => {
-  const prevActiveAbout = prevProps.currentFrame >= 365 && prevProps.currentFrame < 430;
-  const nextActiveAbout = nextProps.currentFrame >= 365 && nextProps.currentFrame < 430;
+  const prevActiveAbout = prevProps.currentFrame >= 365 && prevProps.currentFrame < 450;
+  const nextActiveAbout = nextProps.currentFrame >= 365 && nextProps.currentFrame < 450;
 
-  const prevActiveEvents = prevProps.currentFrame >= 603 && prevProps.currentFrame < 685;
-  const nextActiveEvents = nextProps.currentFrame >= 603 && nextProps.currentFrame < 685;
+  const prevActiveEvents = prevProps.currentFrame >= 603 && prevProps.currentFrame < 840;
+  const nextActiveEvents = nextProps.currentFrame >= 603 && nextProps.currentFrame < 840;
 
-  const prevActiveTeam = prevProps.currentFrame >= 685 && prevProps.currentFrame < 780;
-  const nextActiveTeam = nextProps.currentFrame >= 685 && nextProps.currentFrame < 780;
+  const prevActiveTeam = prevProps.currentFrame >= 840 && prevProps.currentFrame < 1090;
+  const nextActiveTeam = nextProps.currentFrame >= 840 && nextProps.currentFrame < 1090;
 
-  const prevActiveCommunity = prevProps.currentFrame >= 780;
-  const nextActiveCommunity = nextProps.currentFrame >= 780;
+  const prevActiveCommunity = prevProps.currentFrame >= 1090;
+  const nextActiveCommunity = nextProps.currentFrame >= 1090;
 
   return (
     prevActiveAbout === nextActiveAbout &&

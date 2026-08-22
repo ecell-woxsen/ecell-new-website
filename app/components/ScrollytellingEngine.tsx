@@ -15,9 +15,9 @@ interface ScrollytellingEngineProps {
   isJoinModalOpen?: boolean;
 }
 
-const TOTAL_FRAMES = 840;
+const TOTAL_FRAMES = 1262;
 const CRITICAL_PRELOAD_COUNT = 60;
-const SCROLL_TRACK_HEIGHT = TOTAL_FRAMES * 12; // 10,080px scroll track for 1:1 frame pacing
+const SCROLL_TRACK_HEIGHT = TOTAL_FRAMES * 12; // 15,144px scroll track for 1:1 frame pacing
 
 export default function ScrollytellingEngine({
   onFrameUpdate,
