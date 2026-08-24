@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import EventsWallSection from "./EventsWallSection";
 import TeamWallSection from "./TeamWallSection";
-import ContactWallCard from "./ContactWallCard";
+import ContactWallSection from "./ContactWallSection";
 
 interface WallGalleryOverlayProps {
   currentFrame: number;
@@ -75,9 +75,9 @@ function WallGalleryOverlay({
           <TeamWallSection currentFrame={currentFrame} />
         </div>
 
-        {/* Section 3: Connect & Application Form */}
+        {/* Section 3: Connect & Application Form (Architectural Wall Integration) */}
         <div className="shrink-0 pl-16 sm:pl-28 md:pl-40 lg:pl-56">
-          <ContactWallCard />
+          <ContactWallSection />
         </div>
       </div>
     </div>
