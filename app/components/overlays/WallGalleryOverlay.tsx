@@ -75,9 +75,9 @@ function WallGalleryOverlay({
           <TeamWallSection currentFrame={currentFrame} />
         </div>
 
-        {/* Section 3: Connect & Application Form (Architectural Wall Integration) */}
+        {/* Section 3: Connect & Application Form (Architectural Wall Integration & Reveal) */}
         <div className="shrink-0 pl-16 sm:pl-28 md:pl-40 lg:pl-56">
-          <ContactWallSection />
+          <ContactWallSection currentFrame={currentFrame} />
         </div>
       </div>
     </div>

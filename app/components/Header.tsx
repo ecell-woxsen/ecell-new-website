@@ -20,8 +20,8 @@ function Header({
   const navItems = [
     { label: "ABOUT", frame: 378, active: currentFrame >= 365 && currentFrame < 450 },
     { label: "EVENTS", frame: 680, active: currentFrame >= 603 && currentFrame < 840 },
-    { label: "TEAM", frame: 865, active: currentFrame >= 840 && currentFrame < 1090 },
-    { label: "COMMUNITY", frame: 1180, active: currentFrame >= 1090 },
+    { label: "TEAM", frame: 865, active: currentFrame >= 840 && currentFrame < 1140 },
+    { label: "COMMUNITY", frame: 1235, active: currentFrame >= 1140 },
   ];
 
   return (
@@ -119,11 +119,11 @@ export default React.memo(Header, (prevProps, nextProps) => {
   const prevActiveEvents = prevProps.currentFrame >= 603 && prevProps.currentFrame < 840;
   const nextActiveEvents = nextProps.currentFrame >= 603 && nextProps.currentFrame < 840;
 
-  const prevActiveTeam = prevProps.currentFrame >= 840 && prevProps.currentFrame < 1090;
-  const nextActiveTeam = nextProps.currentFrame >= 840 && nextProps.currentFrame < 1090;
+  const prevActiveTeam = prevProps.currentFrame >= 840 && prevProps.currentFrame < 1140;
+  const nextActiveTeam = nextProps.currentFrame >= 840 && nextProps.currentFrame < 1140;
 
-  const prevActiveCommunity = prevProps.currentFrame >= 1090;
-  const nextActiveCommunity = nextProps.currentFrame >= 1090;
+  const prevActiveCommunity = prevProps.currentFrame >= 1140;
+  const nextActiveCommunity = nextProps.currentFrame >= 1140;
 
   return (
     prevActiveAbout === nextActiveAbout &&
