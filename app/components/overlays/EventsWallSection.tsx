@@ -17,8 +17,8 @@ const EVENTS_DATA = [
       "An on-campus Hult Prize experience bringing student innovators together to develop ambitious, globally relevant startup ideas.",
     image: "/events/hult.png",
     alt: "Hult Prize On-Campus Experience at Woxsen",
-    targetFrame: 640,
-    range: [600, 695],
+    targetFrame: 630,
+    range: [598, 680],
   },
   {
     number: "02",
@@ -28,8 +28,8 @@ const EVENTS_DATA = [
       "A high-impact leadership exchange uniting industry leaders, venture builders, and aspiring founders to dissect emerging market paradigms.",
     image: "/events/panel-discussion.jpg",
     alt: "E-Cell Panel Discussion and Keynote at Woxsen",
-    targetFrame: 725,
-    range: [695, 775],
+    targetFrame: 730,
+    range: [680, 775],
   },
   {
     number: "03",
@@ -39,19 +39,24 @@ const EVENTS_DATA = [
       "An immersive community mixer uniting campus strategists and creators through interactive challenges, casual networking, and rapid problem solving.",
     image: "/events/game-night.jpg",
     alt: "E-Cell Game Night and Community Networking",
-    targetFrame: 805,
-    range: [775, 855],
+    targetFrame: 810,
+    range: [775, 860],
   },
 ];
 
 export default function EventsWallSection({
-  currentFrame = 650,
+  currentFrame = 630,
 }: EventsWallSectionProps) {
   return (
     <div className="flex items-center gap-24 sm:gap-36 md:gap-52 lg:gap-72 shrink-0">
-      {EVENTS_DATA.map((event) => {
+      {EVENTS_DATA.map((event, index) => {
         // Calculate focal distance to highlight active event
-        const dist = Math.abs(currentFrame - event.targetFrame);
+        let dist = Math.abs(currentFrame - event.targetFrame);
+        // During the initial dwell window (up to frame 650), keep event 01 perfectly centered/active
+        if (index === 0 && currentFrame <= 650) {
+          dist = 0;
+        }
+
         const isActive = dist < 55;
         const opacity = isActive
           ? 1

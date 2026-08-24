@@ -23,10 +23,10 @@ function ScrollProgressHUD({
   if (currentFrame >= 365 && currentFrame <= 395) {
     chapterName = "ABOUT E-CELL";
     chapterIndex = "02";
-  } else if (currentFrame > 395 && currentFrame < 600) {
+  } else if (currentFrame > 395 && currentFrame < 598) {
     chapterName = "INSIDE HEADQUARTERS";
     chapterIndex = "03";
-  } else if (currentFrame >= 600 && currentFrame < 840) {
+  } else if (currentFrame >= 598 && currentFrame < 840) {
     chapterName = "FLAGSHIP INITIATIVES";
     chapterIndex = "04";
   } else if (currentFrame >= 840 && currentFrame < 1090) {

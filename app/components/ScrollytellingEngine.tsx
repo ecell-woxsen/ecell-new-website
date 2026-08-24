@@ -363,7 +363,7 @@ export default function ScrollytellingEngine({
 
   const handleExploreEvents = () => {
     if (lenisRef.current) {
-      const targetProgress = (638 - 1) / (TOTAL_FRAMES - 1);
+      const targetProgress = (630 - 1) / (TOTAL_FRAMES - 1);
       const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
       lenisRef.current.scrollTo(targetProgress * maxScroll, { duration: 1.4 });
     }

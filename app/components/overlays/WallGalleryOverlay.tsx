@@ -18,10 +18,11 @@ function WallGalleryOverlay({
   const trackRef = useRef<HTMLDivElement>(null);
   const [maxScrollWidth, setMaxScrollWidth] = useState(3200);
 
-  // Active range for the sequence: frames 603 to 1262
+  // Active range for the sequence: frames 598 to 1262
+  // Smooth initial fade-in as camera approaches the wall: frames 598 -> 618
   let opacity = 0;
-  if (currentFrame >= 603 && currentFrame < 618) {
-    opacity = (currentFrame - 603) / 15;
+  if (currentFrame >= 598 && currentFrame < 618) {
+    opacity = (currentFrame - 598) / 20;
   } else if (currentFrame >= 618) {
     opacity = 1;
   }
@@ -42,11 +43,14 @@ function WallGalleryOverlay({
     return () => window.removeEventListener("resize", updateScaleAndWidth);
   }, []);
 
-  // Smooth normalized tracking across the extended 1262-frame sequence
-  // Starts at frame 608, completes smoothly at frame 1262
-  const startFrame = 608;
+  // Frame pacing:
+  // 1. Dwell Phase (Frames 598 to 648): First event card fades in and remains anchored/stationary in focal spotlight.
+  // 2. Motion Phase (Frames 648 to 1262): Horizontal track smoothly scrolls through remaining events, team, and contact wall.
+  const startScrollFrame = 648;
   const endFrame = 1262;
-  const progress = Math.min(1, Math.max(0, (currentFrame - startFrame) / (endFrame - startFrame)));
+  const progress = currentFrame <= startScrollFrame
+    ? 0
+    : Math.min(1, Math.max(0, (currentFrame - startScrollFrame) / (endFrame - startScrollFrame)));
   const translateX = -(progress * maxScrollWidth);
 
   return (
@@ -85,6 +89,6 @@ function WallGalleryOverlay({
 }
 
 export default React.memo(WallGalleryOverlay, (prevProps, nextProps) => {
-  if (prevProps.currentFrame < 603 && nextProps.currentFrame < 603) return true;
+  if (prevProps.currentFrame < 598 && nextProps.currentFrame < 598) return true;
   return prevProps.currentFrame === nextProps.currentFrame;
 });
