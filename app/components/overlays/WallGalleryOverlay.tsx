@@ -28,12 +28,12 @@ function WallGalleryOverlay({
 
   useEffect(() => {
     const updateScaleAndWidth = () => {
-      const scale = Math.max(window.innerWidth / 1280, window.innerHeight / 720);
+      const scale = Math.min(1.2, Math.max(0.8, window.innerWidth / 1280));
       setRenderScale(scale);
       if (trackRef.current) {
         const totalWidth = trackRef.current.scrollWidth;
         const viewWidth = window.innerWidth;
-        setMaxScrollWidth(Math.max(0, totalWidth - viewWidth + 240 * scale));
+        setMaxScrollWidth(Math.max(0, totalWidth - viewWidth + 80));
       }
     };
 
@@ -70,13 +70,13 @@ function WallGalleryOverlay({
         {/* Section 1: Flagship Initiatives & Events (3 Sequential Chapters with Studio Spotlight) */}
         <EventsWallSection currentFrame={currentFrame} onOpenJoinModal={onOpenJoinModal} />
 
-        {/* Section 2: Core Team Leadership (Exact BIG | BIG | SMALL/SMALL continuous exhibition) */}
-        <div className="shrink-0">
-          <TeamWallSection />
+        {/* Section 2: Core Team Leadership (Cinematic Leadership Exhibition) */}
+        <div className="shrink-0 pl-16 sm:pl-28 md:pl-40 lg:pl-56">
+          <TeamWallSection currentFrame={currentFrame} />
         </div>
 
         {/* Section 3: Connect & Application Form */}
-        <div className="shrink-0">
+        <div className="shrink-0 pl-16 sm:pl-28 md:pl-40 lg:pl-56">
           <ContactWallCard />
         </div>
       </div>

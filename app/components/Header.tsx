@@ -20,7 +20,7 @@ function Header({
   const navItems = [
     { label: "ABOUT", frame: 378, active: currentFrame >= 365 && currentFrame < 450 },
     { label: "EVENTS", frame: 680, active: currentFrame >= 603 && currentFrame < 840 },
-    { label: "TEAM", frame: 940, active: currentFrame >= 840 && currentFrame < 1090 },
+    { label: "TEAM", frame: 865, active: currentFrame >= 840 && currentFrame < 1090 },
     { label: "COMMUNITY", frame: 1180, active: currentFrame >= 1090 },
   ];
 
