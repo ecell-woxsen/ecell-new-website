@@ -33,7 +33,7 @@ function WallGalleryOverlay({
       if (trackRef.current) {
         const totalWidth = trackRef.current.scrollWidth;
         const viewWidth = window.innerWidth;
-        setMaxScrollWidth(Math.max(0, totalWidth - viewWidth + 80));
+        setMaxScrollWidth(Math.max(0, totalWidth - viewWidth));
       }
     };
 
