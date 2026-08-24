@@ -10,10 +10,23 @@ interface PreloadManagerProps {
 }
 
 export default function PreloadManager({ progress, isReady }: PreloadManagerProps) {
-  if (isReady) return null;
+  const [visible, setVisible] = React.useState(true);
+
+  React.useEffect(() => {
+    if (isReady) {
+      const timer = setTimeout(() => setVisible(false), 450);
+      return () => clearTimeout(timer);
+    }
+  }, [isReady]);
+
+  if (!visible) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#040608] text-white p-6 transition-opacity duration-500">
+    <div
+      className={`fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#040608] text-white p-6 transition-all duration-500 ease-out ${
+        isReady ? "opacity-0 pointer-events-none scale-[1.02]" : "opacity-100 pointer-events-auto scale-100"
+      }`}
+    >
       <div className="relative flex flex-col items-center max-w-sm text-center">
         {/* Glow behind logo */}
         <div className="absolute -top-12 w-48 h-48 bg-emerald-500/20 rounded-full blur-3xl animate-pulse-glow" />

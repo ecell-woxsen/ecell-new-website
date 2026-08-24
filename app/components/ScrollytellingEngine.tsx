@@ -16,7 +16,8 @@ interface ScrollytellingEngineProps {
 }
 
 const TOTAL_FRAMES = 1262;
-const CRITICAL_PRELOAD_COUNT = 60;
+const CRITICAL_PRELOAD_COUNT = 18; // Ultra-fast boot: only ~500 KB to launch the page in < 300ms
+const SKELETON_STEP = 6; // Skeleton keyframe step: guarantees nearby fallback every 6 frames across 1262 frames
 const SCROLL_TRACK_HEIGHT = TOTAL_FRAMES * 12; // 15,144px scroll track for 1:1 frame pacing
 
 export default function ScrollytellingEngine({
@@ -111,27 +112,27 @@ export default function ScrollytellingEngine({
       requestFrame(center + 1);
       if (center > 1) requestFrame(center - 1);
 
-      // 2. High priority immediate lookahead
+      // 2. High priority directional lookahead
       if (isForward) {
-        for (let i = 1; i <= 10; i++) {
+        for (let i = 2; i <= 14; i++) {
           requestFrame(center + i);
         }
-        for (let i = 1; i <= 4; i++) {
+        for (let i = 2; i <= 5; i++) {
           requestFrame(center - i);
         }
       } else {
-        for (let i = 1; i <= 10; i++) {
+        for (let i = 2; i <= 14; i++) {
           requestFrame(center - i);
         }
-        for (let i = 1; i <= 4; i++) {
+        for (let i = 2; i <= 5; i++) {
           requestFrame(center + i);
         }
       }
 
-      // 3. Broad window around playhead
-      const start = Math.max(1, center - 30);
-      const end = Math.min(TOTAL_FRAMES, center + 70);
-      for (let i = start; i <= end; i++) {
+      // 3. Extended window around playhead (±35 frames)
+      const start = Math.max(1, center - 35);
+      const end = Math.min(TOTAL_FRAMES, center + 75);
+      for (let i = start; i <= end; i += 2) {
         requestFrame(i);
       }
     },
@@ -156,7 +157,8 @@ export default function ScrollytellingEngine({
 
       let imgA = framesCacheRef.current.get(frameA);
 
-      // Smart fallback: prefer last successfully drawn frame if nearby (within ±6 frames) to prevent teleport jumps
+      // Smart fallback: prefer last successfully drawn frame if nearby (within ±6 frames)
+      // or find nearest skeleton keyframe within ±24 frames to prevent blank flashes
       if (!imgA) {
         requestFrame(frameA);
 
@@ -169,7 +171,7 @@ export default function ScrollytellingEngine({
 
           for (const cachedIdx of framesCacheRef.current.keys()) {
             const dist = Math.abs(cachedIdx - frameA);
-            if (dist < minDistance && dist <= 10) {
+            if (dist < minDistance && dist <= 24) {
               minDistance = dist;
               closestFrame = cachedIdx;
             }
@@ -263,15 +265,16 @@ export default function ScrollytellingEngine({
     return () => window.removeEventListener("resize", updateDimensions);
   }, [drawFrameToCanvas]);
 
-  // Initial critical preload on mount
+  // Multi-tier progressive background streaming engine
   useEffect(() => {
     let isCancelled = false;
     let loaded = 0;
 
-    const initialLoad = async () => {
-      const promises: Promise<void>[] = [];
+    const bootEngine = async () => {
+      // Step 1: Fast Bootstrapping (Frames 1 - 18)
+      const initialPromises: Promise<void>[] = [];
       for (let i = 1; i <= CRITICAL_PRELOAD_COUNT; i++) {
-        promises.push(
+        initialPromises.push(
           new Promise((resolve) => {
             const img = new Image();
             img.src = getFramePath(i);
@@ -290,30 +293,45 @@ export default function ScrollytellingEngine({
         );
       }
 
-      await Promise.all(promises);
+      await Promise.all(initialPromises);
       if (isCancelled) return;
 
       setIsReady(true);
       setLoadProgress(100);
 
-      // Render first frame immediately
+      // Render initial frame immediately
       drawFrameToCanvas(1);
 
-      // Background stream remaining frames progressively
-      const streamRemaining = async () => {
-        for (let i = CRITICAL_PRELOAD_COUNT + 1; i <= TOTAL_FRAMES; i += 20) {
+      // Step 2: Skeleton Keyframe Stream (every 6th frame across 1 - 1262)
+      // Provides instant fallback anchors across the entire timeline in ~1.5s
+      const streamSkeleton = async () => {
+        for (let i = 1; i <= TOTAL_FRAMES; i += SKELETON_STEP) {
           if (isCancelled) break;
-          for (let j = i; j < i + 20 && j <= TOTAL_FRAMES; j++) {
-            requestFrame(j);
+          requestFrame(i);
+          if (i % 30 === 0) {
+            await new Promise((r) => setTimeout(r, 12));
           }
-          await new Promise((r) => setTimeout(r, 20));
         }
       };
 
-      streamRemaining();
+      await streamSkeleton();
+      if (isCancelled) return;
+
+      // Step 3: Progressive Infill Stream during idle cycles
+      const streamInfill = async () => {
+        for (let i = CRITICAL_PRELOAD_COUNT + 1; i <= TOTAL_FRAMES; i += 15) {
+          if (isCancelled) break;
+          for (let j = i; j < i + 15 && j <= TOTAL_FRAMES; j++) {
+            requestFrame(j);
+          }
+          await new Promise((r) => setTimeout(r, 25));
+        }
+      };
+
+      streamInfill();
     };
 
-    initialLoad();
+    bootEngine();
 
     return () => {
       isCancelled = true;
