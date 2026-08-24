@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import Image from "next/image";
 
 interface DoorAboutOverlayProps {
   currentFrame: number;
@@ -21,6 +22,11 @@ function DoorAboutOverlay({
   // 2. Headlines: frame 358 -> 368 (12px upward drift)
   const headProgress = Math.min(1, Math.max(0, (currentFrame - 358) / 10));
   const headY = (1 - headProgress) * 12;
+
+  // Center Logo: frame 357 -> 369 (10px upward drift with subtle scale)
+  const logoProgress = Math.min(1, Math.max(0, (currentFrame - 357) / 10));
+  const logoY = (1 - logoProgress) * 10;
+  const logoScale = 0.9 + logoProgress * 0.1;
 
   // 3. Body Descriptions: frame 364 -> 374 (8px upward drift)
   const bodyProgress = Math.min(1, Math.max(0, (currentFrame - 364) / 10));
@@ -55,7 +61,7 @@ function DoorAboutOverlay({
       />
 
       {/* ========================================================================= */}
-      {/* 3-COLUMN ARCHITECTURAL GRID: [LEFT STORY] | [DOOR VOID] | [RIGHT STORY]   */}
+      {/* 3-COLUMN ARCHITECTURAL GRID: [LEFT STORY] | [CENTER LOGO] | [RIGHT STORY] */}
       {/* ========================================================================= */}
       <div
         className="relative z-10 w-full max-w-[1540px] mx-auto grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] items-start gap-8 lg:gap-14 xl:gap-20 will-change-transform"
@@ -97,7 +103,7 @@ function DoorAboutOverlay({
 
           {/* Level 3: Short Supporting Editorial Paragraph (High Readability) */}
           <p
-            className="text-[14px] sm:text-[15px] lg:text-[16px] text-slate-100/90 font-normal leading-[1.75] min-h-[84px] mb-8 drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] max-w-[440px] will-change-transform"
+            className="text-[14px] sm:text-[15px] lg:text-[16px] text-slate-100/90 font-normal leading-[1.75] min-h-[110px] sm:min-h-[115px] mb-8 drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] max-w-[440px] will-change-transform"
             style={{
               opacity: bodyProgress,
               transform: `translate3d(0, ${bodyY}px, 0)`,
@@ -136,12 +142,26 @@ function DoorAboutOverlay({
         </div>
 
         {/* ========================================================================= */}
-        {/* COLUMN 2: CENTER CORRIDOR (Unobstructed Negative Space for Physical Door) */}
+        {/* COLUMN 2: CENTER IMAGE                                                    */}
         {/* ========================================================================= */}
         <div
-          className="hidden md:block w-[320px] lg:w-[380px] xl:w-[420px] shrink-0 pointer-events-none"
-          aria-hidden="true"
-        />
+          className="flex items-center justify-center w-full md:w-[280px] lg:w-[340px] xl:w-[400px] self-center shrink-0 order-first md:order-none mb-6 md:mb-0 will-change-transform"
+          style={{
+            opacity: logoProgress,
+            transform: `translate3d(0, ${logoY}px, 0) scale(${logoScale})`,
+          }}
+        >
+          <div className="relative w-44 h-44 sm:w-56 sm:h-56 md:w-64 md:h-64 lg:w-72 lg:h-72 xl:w-80 xl:h-80 flex items-center justify-center">
+            <Image
+              src="/ecell-logo.png"
+              alt="E-Cell Woxsen Logo"
+              width={320}
+              height={320}
+              className="w-full h-full object-contain drop-shadow-[0_8px_32px_rgba(0,0,0,0.95)]"
+              priority
+            />
+          </div>
+        </div>
 
         {/* ========================================================================= */}
         {/* COLUMN 3: RIGHT SIDE — MISSION & PILLARS                                  */}
@@ -177,7 +197,7 @@ function DoorAboutOverlay({
 
           {/* Level 3: Short Supporting Mission Statement (High Readability) */}
           <p
-            className="text-[14px] sm:text-[15px] lg:text-[16px] text-slate-100/90 font-normal leading-[1.75] min-h-[84px] mb-8 drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] max-w-[440px] will-change-transform"
+            className="text-[14px] sm:text-[15px] lg:text-[16px] text-slate-100/90 font-normal leading-[1.75] min-h-[110px] sm:min-h-[115px] mb-8 drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] max-w-[440px] will-change-transform"
             style={{
               opacity: bodyProgress,
               transform: `translate3d(0, ${bodyY}px, 0)`,
