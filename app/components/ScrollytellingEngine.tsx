@@ -41,8 +41,12 @@ export default function ScrollytellingEngine({
 
   // Rendering & window dimension refs
   const currentFrameRef = useRef(1);
+  const smoothFrameRef = useRef(1);
+  const lastTimeRef = useRef(performance.now());
   const lastDrawnFloatRef = useRef<number | null>(null);
+  const lastGoodDrawnFrameRef = useRef<number | null>(null);
   const lastReportedFrameRef = useRef<number>(1);
+  const maxGalleryWidthRef = useRef(3200);
   const windowWidthRef = useRef(0);
   const windowHeightRef = useRef(0);
 
@@ -63,26 +67,70 @@ export default function ScrollytellingEngine({
       loadingSetRef.current.add(idx);
       const img = new Image();
       img.src = getFramePath(idx);
-      img.onload = () => {
+
+      const onDecodedOrLoaded = () => {
         framesCacheRef.current.set(idx, img);
         loadingSetRef.current.delete(idx);
+
+        // If visible playhead needs this newly loaded frame for base or blend, trigger immediate repaint
+        const curFloat = currentFrameRef.current;
+        const curFloor = Math.floor(curFloat);
+        if (idx === curFloor || idx === curFloor + 1 || Math.abs(curFloat - idx) < 1.2) {
+          lastDrawnFloatRef.current = null;
+        }
       };
+
+      if ("decode" in img && typeof img.decode === "function") {
+        img
+          .decode()
+          .then(onDecodedOrLoaded)
+          .catch(() => {
+            img.onload = onDecodedOrLoaded;
+          });
+      } else {
+        img.onload = onDecodedOrLoaded;
+      }
+
       img.onerror = () => {
         loadingSetRef.current.delete(idx);
       };
-      if ("decode" in img && typeof img.decode === "function") {
-        img.decode().catch(() => {});
-      }
     },
     [getFramePath]
   );
 
-  // Priority window loader ahead of scroll trajectory
+  // Direction-aware priority window loader ahead of scroll trajectory
+  const lastCenterRef = useRef(1);
   const preloadPriorityWindow = useCallback(
     (centerFrame: number) => {
       const center = Math.round(centerFrame);
-      const start = Math.max(1, center - 35);
-      const end = Math.min(TOTAL_FRAMES, center + 75);
+      const isForward = center >= lastCenterRef.current;
+      lastCenterRef.current = center;
+
+      // 1. Immediate critical blend pair: center and center + 1
+      requestFrame(center);
+      requestFrame(center + 1);
+      if (center > 1) requestFrame(center - 1);
+
+      // 2. High priority immediate lookahead
+      if (isForward) {
+        for (let i = 1; i <= 10; i++) {
+          requestFrame(center + i);
+        }
+        for (let i = 1; i <= 4; i++) {
+          requestFrame(center - i);
+        }
+      } else {
+        for (let i = 1; i <= 10; i++) {
+          requestFrame(center - i);
+        }
+        for (let i = 1; i <= 4; i++) {
+          requestFrame(center + i);
+        }
+      }
+
+      // 3. Broad window around playhead
+      const start = Math.max(1, center - 30);
+      const end = Math.min(TOTAL_FRAMES, center + 70);
       for (let i = start; i <= end; i++) {
         requestFrame(i);
       }
@@ -90,7 +138,7 @@ export default function ScrollytellingEngine({
     [requestFrame]
   );
 
-  // Canvas drawing function with Sub-Frame Alpha Cross-Fading
+  // Canvas drawing function with Sub-Frame Hermite / Smoothstep Temporal Blending
   const drawFrameToCanvas = useCallback(
     (frameFloat: number) => {
       const canvas = canvasRef.current;
@@ -101,27 +149,35 @@ export default function ScrollytellingEngine({
       const clamped = Math.min(TOTAL_FRAMES, Math.max(1, frameFloat));
       const frameA = Math.floor(clamped);
       const frameB = Math.min(TOTAL_FRAMES, frameA + 1);
-      const blendAlpha = clamped - frameA;
+      const rawAlpha = clamped - frameA;
+
+      // Smoothstep / Hermite blending curve (3t^2 - 2t^3) for zero-step, filmic crossfade
+      const blendAlpha = rawAlpha * rawAlpha * (3 - 2 * rawAlpha);
 
       let imgA = framesCacheRef.current.get(frameA);
 
-      // Fallback to nearest cached frame if target frame is still fetching
+      // Smart fallback: prefer last successfully drawn frame if nearby (within ±6 frames) to prevent teleport jumps
       if (!imgA) {
         requestFrame(frameA);
 
-        let closestFrame = -1;
-        let minDistance = Infinity;
+        const lastGood = lastGoodDrawnFrameRef.current;
+        if (lastGood !== null && Math.abs(lastGood - frameA) <= 6 && framesCacheRef.current.has(lastGood)) {
+          imgA = framesCacheRef.current.get(lastGood);
+        } else {
+          let closestFrame = -1;
+          let minDistance = Infinity;
 
-        for (const cachedIdx of framesCacheRef.current.keys()) {
-          const dist = Math.abs(cachedIdx - frameA);
-          if (dist < minDistance) {
-            minDistance = dist;
-            closestFrame = cachedIdx;
+          for (const cachedIdx of framesCacheRef.current.keys()) {
+            const dist = Math.abs(cachedIdx - frameA);
+            if (dist < minDistance && dist <= 10) {
+              minDistance = dist;
+              closestFrame = cachedIdx;
+            }
           }
-        }
 
-        if (closestFrame !== -1) {
-          imgA = framesCacheRef.current.get(closestFrame);
+          if (closestFrame !== -1) {
+            imgA = framesCacheRef.current.get(closestFrame);
+          }
         }
       }
 
@@ -129,9 +185,11 @@ export default function ScrollytellingEngine({
         return;
       }
 
+      lastGoodDrawnFrameRef.current = frameA;
+
       // Pre-request frameB if blend is significant
       let imgB: HTMLImageElement | undefined;
-      if (blendAlpha > 0.005 && frameB !== frameA) {
+      if (rawAlpha > 0.002 && frameB !== frameA) {
         imgB = framesCacheRef.current.get(frameB);
         if (!imgB) {
           requestFrame(frameB);
@@ -152,6 +210,7 @@ export default function ScrollytellingEngine({
 
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
 
       const imgWidth = imgA.naturalWidth || imgA.width;
       const imgHeight = imgA.naturalHeight || imgA.height;
@@ -179,8 +238,8 @@ export default function ScrollytellingEngine({
       ctx.globalAlpha = 1.0;
       ctx.drawImage(imgA, offsetX, offsetY, drawW, drawH);
 
-      // 2. Cross-dissolve next frame for 120 FPS sub-frame smoothness
-      if (blendAlpha > 0.005 && imgB && imgB.complete && imgB.naturalWidth > 0) {
+      // 2. Cross-dissolve next frame for ultra-smooth 120 FPS sub-frame interpolation
+      if (blendAlpha > 0.002 && imgB && imgB.complete && imgB.naturalWidth > 0) {
         ctx.globalAlpha = blendAlpha;
         ctx.drawImage(imgB, offsetX, offsetY, drawW, drawH);
         ctx.globalAlpha = 1.0;
@@ -242,12 +301,12 @@ export default function ScrollytellingEngine({
 
       // Background stream remaining frames progressively
       const streamRemaining = async () => {
-        for (let i = CRITICAL_PRELOAD_COUNT + 1; i <= TOTAL_FRAMES; i += 25) {
+        for (let i = CRITICAL_PRELOAD_COUNT + 1; i <= TOTAL_FRAMES; i += 20) {
           if (isCancelled) break;
-          for (let j = i; j < i + 25 && j <= TOTAL_FRAMES; j++) {
+          for (let j = i; j < i + 20 && j <= TOTAL_FRAMES; j++) {
             requestFrame(j);
           }
-          await new Promise((r) => setTimeout(r, 16));
+          await new Promise((r) => setTimeout(r, 20));
         }
       };
 
@@ -268,12 +327,12 @@ export default function ScrollytellingEngine({
     const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     const lenis = new Lenis({
-      duration: prefersReducedMotion ? 0 : 1.2,
+      duration: prefersReducedMotion ? 0 : 1.25,
       easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)), // Apple-style cubic easeOutExponential
       orientation: "vertical",
       gestureOrientation: "vertical",
       smoothWheel: true,
-      wheelMultiplier: 1.0,
+      wheelMultiplier: 0.95,
       touchMultiplier: 1.5,
       infinite: false,
     });
@@ -289,26 +348,84 @@ export default function ScrollytellingEngine({
       const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
       const progress = maxScroll > 0 ? Math.min(1, Math.max(0, scrollY / maxScroll)) : 0;
 
-      const frameFloat = 1 + progress * (TOTAL_FRAMES - 1);
-      currentFrameRef.current = frameFloat;
+      const targetFrameFloat = 1 + progress * (TOTAL_FRAMES - 1);
+
+      // Ultra-responsive time-invariant exponential damping filter for continuous sub-frame smoothness
+      const now = performance.now();
+      const dt = Math.min(0.05, Math.max(0.001, (now - lastTimeRef.current) / 1000));
+      lastTimeRef.current = now;
+
+      const smoothFactor = 1 - Math.exp(-32 * dt);
+      smoothFrameRef.current += (targetFrameFloat - smoothFrameRef.current) * smoothFactor;
+      const renderFloat = smoothFrameRef.current;
+      currentFrameRef.current = renderFloat;
 
       // Priority stream loader around current position
-      preloadPriorityWindow(frameFloat);
+      preloadPriorityWindow(renderFloat);
 
       // Hero Video Crossfade calculation
-      const vOpacity = Math.max(0, 1 - (frameFloat - 1) / 14);
+      const vOpacity = Math.max(0, 1 - (renderFloat - 1) / 14);
       setVideoOpacity(vOpacity);
+
+      // Hardware CSS Custom Properties Synchronization (120 FPS Sub-Pixel Compositor)
+      const container = containerRef.current;
+      if (container) {
+        // Hero Overlay Transforms
+        const heroOpacity = Math.max(0, 1 - (renderFloat - 1) / 32);
+        const heroTY = (renderFloat - 1) * 2;
+        container.style.setProperty("--hero-opacity", heroOpacity.toFixed(3));
+        container.style.setProperty("--hero-ty", `-${heroTY.toFixed(2)}px`);
+        container.style.setProperty("--hero-vis", heroOpacity <= 0.01 ? "hidden" : "visible");
+
+        // Door About Overlay Transforms
+        let doorOpacity = 0;
+        let doorTY = 0;
+        if (renderFloat >= 355 && renderFloat < 368) {
+          const t = (renderFloat - 355) / 13;
+          doorOpacity = t;
+          doorTY = (1 - t) * 10;
+        } else if (renderFloat >= 368 && renderFloat <= 398) {
+          doorOpacity = 1;
+          doorTY = 0;
+        } else if (renderFloat > 398 && renderFloat <= 415) {
+          const t = (renderFloat - 398) / 17;
+          doorOpacity = 1 - t;
+          doorTY = t * -10;
+        }
+        container.style.setProperty("--door-opacity", doorOpacity.toFixed(3));
+        container.style.setProperty("--door-ty", `${doorTY.toFixed(2)}px`);
+        container.style.setProperty("--door-vis", doorOpacity <= 0.005 ? "hidden" : "visible");
+
+        // Wall Gallery Overlay Continuous Translation
+        const startScrollFrame = 648;
+        const endFrame = 1262;
+        const galleryProgress = renderFloat <= startScrollFrame
+          ? 0
+          : Math.min(1, Math.max(0, (renderFloat - startScrollFrame) / (endFrame - startScrollFrame)));
+        const galleryTX = -(galleryProgress * maxGalleryWidthRef.current);
+
+        let galleryOpacity = 0;
+        if (renderFloat >= 598 && renderFloat < 618) {
+          galleryOpacity = (renderFloat - 598) / 20;
+        } else if (renderFloat >= 618) {
+          galleryOpacity = 1;
+        }
+        container.style.setProperty("--gallery-tx", `${galleryTX.toFixed(2)}px`);
+        container.style.setProperty("--gallery-opacity", galleryOpacity.toFixed(3));
+        container.style.setProperty("--gallery-vis", galleryOpacity <= 0.005 ? "hidden" : "visible");
+        container.style.setProperty("--gallery-pe", galleryOpacity > 0.1 ? "auto" : "none");
+      }
 
       // Canvas Render Update
       const lastDrawn = lastDrawnFloatRef.current;
-      const deltaSinceLastDraw = lastDrawn === null ? Infinity : Math.abs(frameFloat - lastDrawn);
+      const deltaSinceLastDraw = lastDrawn === null ? Infinity : Math.abs(renderFloat - lastDrawn);
 
-      if (deltaSinceLastDraw > 0.005) {
-        drawFrameToCanvas(frameFloat);
+      if (deltaSinceLastDraw > 0.002) {
+        drawFrameToCanvas(renderFloat);
       }
 
       // Notify React overlays only on integer boundary transitions
-      const roundedFrame = Math.round(frameFloat);
+      const roundedFrame = Math.round(renderFloat);
       if (roundedFrame !== lastReportedFrameRef.current) {
         lastReportedFrameRef.current = roundedFrame;
         setCurrentFrame(roundedFrame);
@@ -425,10 +542,13 @@ export default function ScrollytellingEngine({
           onOpenJoinModal={onOpenJoinModal}
         />
 
-        {/* Overlay 3: Wall Gallery (Frames 603 - 840) */}
+        {/* Overlay 3: Wall Gallery (Frames 598 - 1262) */}
         <WallGalleryOverlay
           currentFrame={currentFrame}
           onOpenJoinModal={onOpenJoinModal}
+          onTrackWidthChange={(w) => {
+            maxGalleryWidthRef.current = w;
+          }}
         />
       </div>
     </>

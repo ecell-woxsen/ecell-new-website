@@ -10,25 +10,8 @@ interface DoorAboutOverlayProps {
 function DoorAboutOverlay({
   currentFrame,
 }: DoorAboutOverlayProps) {
-  // Master active frame window: 355 to 415
-  if (currentFrame < 355 || currentFrame > 415) return null;
-
-  // Master opacity envelope
-  let masterOpacity = 0;
-  let translateY = 0;
-
-  if (currentFrame >= 355 && currentFrame < 368) {
-    const t = (currentFrame - 355) / 13;
-    masterOpacity = t;
-    translateY = (1 - t) * 10;
-  } else if (currentFrame >= 368 && currentFrame <= 398) {
-    masterOpacity = 1;
-    translateY = 0;
-  } else if (currentFrame > 398 && currentFrame <= 415) {
-    const t = (currentFrame - 398) / 17;
-    masterOpacity = 1 - t;
-    translateY = t * -10;
-  }
+  // Master active frame window: 350 to 425
+  if (currentFrame < 350 || currentFrame > 425) return null;
 
   // Progressive staggered animation offsets
   // 1. Labels: frame 356 -> 366 (8px upward drift)
@@ -49,21 +32,24 @@ function DoorAboutOverlay({
 
   return (
     <div
-      className="fixed inset-0 z-30 flex items-center justify-center p-6 sm:p-10 lg:p-14 pointer-events-none transition-opacity duration-300 select-none"
-      style={{ opacity: masterOpacity }}
+      className="fixed inset-0 z-30 flex items-center justify-center p-6 sm:p-10 lg:p-14 pointer-events-none select-none"
+      style={{
+        opacity: "var(--door-opacity, 0)",
+        visibility: "var(--door-vis, hidden)" as any,
+      }}
     >
       {/* ========================================================================= */}
       {/* CINEMATIC LOCALIZED CONTRAST GRADING                                      */}
       {/* Seamless radial illumination mask behind text: no cards, no visible edges */}
       {/* ========================================================================= */}
       <div
-        className="absolute inset-0 pointer-events-none transition-opacity duration-500"
+        className="absolute inset-0 pointer-events-none"
         style={{
           background: `
             radial-gradient(circle at 18% 50%, rgba(5, 8, 12, 0.62) 0%, rgba(5, 8, 12, 0.35) 45%, rgba(5, 8, 12, 0) 75%),
             radial-gradient(circle at 82% 50%, rgba(5, 8, 12, 0.62) 0%, rgba(5, 8, 12, 0.35) 45%, rgba(5, 8, 12, 0) 75%)
           `,
-          opacity: masterOpacity,
+          opacity: "var(--door-opacity, 0)",
         }}
         aria-hidden="true"
       />
@@ -74,7 +60,7 @@ function DoorAboutOverlay({
       <div
         className="relative z-10 w-full max-w-[1540px] mx-auto grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] items-start gap-8 lg:gap-14 xl:gap-20 will-change-transform"
         style={{
-          transform: `translate3d(0, ${translateY}px, 0)`,
+          transform: "translate3d(0, var(--door-ty, 0px), 0)",
         }}
       >
         {/* ========================================================================= */}

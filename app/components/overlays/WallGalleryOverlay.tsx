@@ -8,24 +8,16 @@ import ContactWallSection from "./ContactWallSection";
 interface WallGalleryOverlayProps {
   currentFrame: number;
   onOpenJoinModal: () => void;
+  onTrackWidthChange?: (width: number) => void;
 }
 
 function WallGalleryOverlay({
   currentFrame,
   onOpenJoinModal,
+  onTrackWidthChange,
 }: WallGalleryOverlayProps) {
   const [renderScale, setRenderScale] = useState(1);
   const trackRef = useRef<HTMLDivElement>(null);
-  const [maxScrollWidth, setMaxScrollWidth] = useState(3200);
-
-  // Active range for the sequence: frames 598 to 1262
-  // Smooth initial fade-in as camera approaches the wall: frames 598 -> 618
-  let opacity = 0;
-  if (currentFrame >= 598 && currentFrame < 618) {
-    opacity = (currentFrame - 598) / 20;
-  } else if (currentFrame >= 618) {
-    opacity = 1;
-  }
 
   useEffect(() => {
     const updateScaleAndWidth = () => {
@@ -34,41 +26,33 @@ function WallGalleryOverlay({
       if (trackRef.current) {
         const totalWidth = trackRef.current.scrollWidth;
         const viewWidth = window.innerWidth;
-        setMaxScrollWidth(Math.max(0, totalWidth - viewWidth));
+        const width = Math.max(0, totalWidth - viewWidth);
+        if (onTrackWidthChange) {
+          onTrackWidthChange(width);
+        }
       }
     };
 
     updateScaleAndWidth();
     window.addEventListener("resize", updateScaleAndWidth);
     return () => window.removeEventListener("resize", updateScaleAndWidth);
-  }, []);
-
-  // Frame pacing:
-  // 1. Dwell Phase (Frames 598 to 648): First event card fades in and remains anchored/stationary in focal spotlight.
-  // 2. Motion Phase (Frames 648 to 1262): Horizontal track smoothly scrolls through remaining events, team, and contact wall.
-  const startScrollFrame = 648;
-  const endFrame = 1262;
-  const progress = currentFrame <= startScrollFrame
-    ? 0
-    : Math.min(1, Math.max(0, (currentFrame - startScrollFrame) / (endFrame - startScrollFrame)));
-  const translateX = -(progress * maxScrollWidth);
+  }, [onTrackWidthChange]);
 
   return (
     <div
-      className="fixed inset-0 z-30 flex items-center overflow-hidden transition-opacity duration-300 pointer-events-none"
+      className="fixed inset-0 z-30 flex items-center overflow-hidden pointer-events-none"
       style={{
-        opacity,
-        visibility: opacity <= 0.005 ? "hidden" : "visible",
+        opacity: "var(--gallery-opacity, 0)",
+        visibility: "var(--gallery-vis, hidden)" as any,
       }}
     >
       {/* Physically Wall-Anchored Gallery Track */}
       <div
         ref={trackRef}
-        className={`flex items-center gap-16 sm:gap-24 md:gap-36 lg:gap-44 pl-10 sm:pl-20 md:pl-32 pr-32 py-12 will-change-transform ${
-          opacity > 0.1 ? "pointer-events-auto" : "pointer-events-none"
-        }`}
+        className="flex items-center gap-16 sm:gap-24 md:gap-36 lg:gap-44 pl-10 sm:pl-20 md:pl-32 pr-32 py-12 will-change-transform"
         style={{
-          transform: `translate3d(${translateX}px, 0, 0)`,
+          transform: "translate3d(var(--gallery-tx, 0px), 0, 0)",
+          pointerEvents: "var(--gallery-pe, none)" as any,
         }}
       >
         {/* Section 1: Flagship Initiatives & Events (3 Sequential Chapters with Studio Spotlight) */}
@@ -89,6 +73,6 @@ function WallGalleryOverlay({
 }
 
 export default React.memo(WallGalleryOverlay, (prevProps, nextProps) => {
-  if (prevProps.currentFrame < 598 && nextProps.currentFrame < 598) return true;
+  if (prevProps.currentFrame < 590 && nextProps.currentFrame < 590) return true;
   return prevProps.currentFrame === nextProps.currentFrame;
 });

@@ -13,11 +13,7 @@ function HeroOverlay({
   onExploreClick,
   onOpenJoinModal,
 }: HeroOverlayProps) {
-  // Smoothly fade out from frame 1 to frame 35
-  const opacity = Math.max(0, 1 - (currentFrame - 1) / 32);
-  const translateY = (currentFrame - 1) * 2;
-
-  if (opacity <= 0.01) return null;
+  if (currentFrame > 45) return null;
 
   const part1 = "WHERE ";
   const part2 = "BUILDERS";
@@ -25,10 +21,11 @@ function HeroOverlay({
 
   return (
     <div
-      className="fixed inset-0 z-20 flex flex-col justify-center items-center px-6 sm:px-16 text-center pointer-events-none transition-opacity duration-300 will-change-transform"
+      className="fixed inset-0 z-20 flex flex-col justify-center items-center px-6 sm:px-16 text-center pointer-events-none will-change-transform"
       style={{
-        opacity,
-        transform: `translate3d(0, -${translateY}px, 0)`,
+        opacity: "var(--hero-opacity, 1)",
+        transform: "translate3d(0, var(--hero-ty, 0px), 0)",
+        visibility: "var(--hero-vis, visible)" as any,
       }}
     >
       <div className="relative z-10 max-w-[880px] mx-auto flex flex-col items-center text-center px-4 pointer-events-auto">
