@@ -1,148 +1,272 @@
 "use client";
 
 import React from "react";
-import { Sparkles, Target, Compass, Users2, Rocket, ArrowRight } from "lucide-react";
 
 interface DoorAboutOverlayProps {
   currentFrame: number;
-  onOpenJoinModal: () => void;
+  onOpenJoinModal?: () => void;
 }
 
-export default function DoorAboutOverlay({
+function DoorAboutOverlay({
   currentFrame,
-  onOpenJoinModal,
 }: DoorAboutOverlayProps) {
-  // Active window: frames 360 to 402, fully visible from 368 to 395
-  let opacity = 0;
-  if (currentFrame >= 360 && currentFrame < 368) {
-    opacity = (currentFrame - 360) / 8;
-  } else if (currentFrame >= 368 && currentFrame <= 395) {
-    opacity = 1;
-  } else if (currentFrame > 395 && currentFrame <= 402) {
-    opacity = 1 - (currentFrame - 395) / 7;
+  // Master active frame window: 355 to 415
+  if (currentFrame < 355 || currentFrame > 415) return null;
+
+  // Master opacity envelope
+  let masterOpacity = 0;
+  let translateY = 0;
+
+  if (currentFrame >= 355 && currentFrame < 368) {
+    const t = (currentFrame - 355) / 13;
+    masterOpacity = t;
+    translateY = (1 - t) * 10;
+  } else if (currentFrame >= 368 && currentFrame <= 398) {
+    masterOpacity = 1;
+    translateY = 0;
+  } else if (currentFrame > 398 && currentFrame <= 415) {
+    const t = (currentFrame - 398) / 17;
+    masterOpacity = 1 - t;
+    translateY = t * -10;
   }
 
-  if (opacity <= 0.01) return null;
+  // Progressive staggered animation offsets
+  // 1. Labels: frame 356 -> 366 (8px upward drift)
+  const labelProgress = Math.min(1, Math.max(0, (currentFrame - 356) / 10));
+  const labelY = (1 - labelProgress) * 8;
+
+  // 2. Headlines: frame 358 -> 368 (12px upward drift)
+  const headProgress = Math.min(1, Math.max(0, (currentFrame - 358) / 10));
+  const headY = (1 - headProgress) * 12;
+
+  // 3. Body Descriptions: frame 364 -> 374 (8px upward drift)
+  const bodyProgress = Math.min(1, Math.max(0, (currentFrame - 364) / 10));
+  const bodyY = (1 - bodyProgress) * 8;
+
+  // 4. Bottom Specs & Pillars: frame 370 -> 382 (6px upward drift)
+  const bottomProgress = Math.min(1, Math.max(0, (currentFrame - 370) / 12));
+  const bottomY = (1 - bottomProgress) * 6;
 
   return (
     <div
-      className="fixed inset-0 z-30 flex items-center justify-between p-4 sm:p-8 md:p-12 pointer-events-none transition-all duration-300"
-      style={{ opacity }}
+      className="fixed inset-0 z-30 flex items-center justify-center p-6 sm:p-10 lg:p-14 pointer-events-none transition-opacity duration-300 select-none"
+      style={{ opacity: masterOpacity }}
     >
-      <div className="w-full max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6 md:gap-16">
-        {/* Left Card: Who We Are & Our Story */}
-        <div
-          className="w-full md:w-[420px] lg:w-[450px] glass-panel-door rounded-3xl p-6 sm:p-7 pointer-events-auto text-slate-100 shadow-2xl transition-transform duration-500"
-          style={{
-            transform: `perspective(1000px) rotateY(${Math.min(6, (currentFrame - 365) * 1.2)}deg)`,
-          }}
-        >
-          <div className="flex items-center gap-2 text-emerald-400 text-xs font-mono font-semibold mb-2 tracking-wider">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>WHO WE ARE</span>
-          </div>
+      {/* ========================================================================= */}
+      {/* CINEMATIC LOCALIZED CONTRAST GRADING                                      */}
+      {/* Seamless radial illumination mask behind text: no cards, no visible edges */}
+      {/* ========================================================================= */}
+      <div
+        className="absolute inset-0 pointer-events-none transition-opacity duration-500"
+        style={{
+          background: `
+            radial-gradient(circle at 18% 50%, rgba(5, 8, 12, 0.62) 0%, rgba(5, 8, 12, 0.35) 45%, rgba(5, 8, 12, 0) 75%),
+            radial-gradient(circle at 82% 50%, rgba(5, 8, 12, 0.62) 0%, rgba(5, 8, 12, 0.35) 45%, rgba(5, 8, 12, 0) 75%)
+          `,
+          opacity: masterOpacity,
+        }}
+        aria-hidden="true"
+      />
 
-          <h2 className="text-2xl sm:text-3xl font-bold font-heading text-white leading-tight mb-3">
-            A Vision. A Movement.
-          </h2>
-
-          <p className="text-xs sm:text-sm text-slate-300 leading-relaxed mb-4">
-            Founded on <span className="text-emerald-300 font-semibold">25th July 2025</span> at Woxsen University, the Entrepreneurship Cell (E-Cell) is a dynamic student-driven catalyst transforming campus ambition into action, innovation into opportunity, and ideas into ventures.
-          </p>
-
-          <div className="space-y-2.5 pt-1 border-t border-white/10 text-xs">
-            <div className="flex items-start gap-2.5">
-              <Users2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-              <div>
-                <span className="font-semibold text-white">Our Community:</span>{" "}
-                <span className="text-slate-300">
-                  A vibrant network of student founders and innovators united across 6+ academic schools.
-                </span>
-              </div>
-            </div>
-            <div className="flex items-start gap-2.5">
-              <Rocket className="w-4 h-4 text-teal-400 shrink-0 mt-0.5" />
-              <div>
-                <span className="font-semibold text-white">Our Ecosystem:</span>{" "}
-                <span className="text-slate-300">
-                  Bridging academia and industry to nurture ideas from initial spark to execution.
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Center Space: Retains visibility of the physical E-Cell door in the video */}
-        <div className="hidden md:flex flex-col items-center justify-center pointer-events-none px-4">
-          <div className="px-3 py-1 rounded-full bg-black/60 border border-emerald-500/30 backdrop-blur-md text-[10px] font-mono text-emerald-300 uppercase tracking-widest animate-pulse">
-            E-Cell Headquarters
-          </div>
-        </div>
-
-        {/* Right Card: Mission, Vision & Core Pillars */}
-        <div
-          className="w-full md:w-[420px] lg:w-[450px] glass-panel-door rounded-3xl p-6 sm:p-7 pointer-events-auto text-slate-100 shadow-2xl transition-transform duration-500"
-          style={{
-            transform: `perspective(1000px) rotateY(-${Math.min(6, (currentFrame - 365) * 1.2)}deg)`,
-          }}
-        >
-          <div className="flex items-center gap-2 text-teal-400 text-xs font-mono font-semibold mb-2 tracking-wider">
-            <Target className="w-3.5 h-3.5" />
-            <span>MISSION & PILLARS</span>
-          </div>
-
-          <h2 className="text-2xl sm:text-3xl font-bold font-heading text-white leading-tight mb-3">
-            Igniting Innovation.
-          </h2>
-
-          <p className="text-xs sm:text-sm text-slate-300 leading-relaxed mb-4">
-            To cultivate a thriving entrepreneurial culture by equipping students with high-impact skills, mentorship, and platforms to build sustainable solutions.
-          </p>
-
-          <div className="grid grid-cols-2 gap-2 pt-1 border-t border-white/10 text-xs mb-4">
-            <div className="p-2.5 rounded-xl bg-white/[0.04] border border-white/5">
-              <span className="block font-bold text-emerald-300 text-[11px] font-mono uppercase">
-                01 · INSPIRE
-              </span>
-              <p className="text-[11px] text-slate-300 mt-0.5">
-                Ignite the founder spark in every student.
-              </p>
-            </div>
-            <div className="p-2.5 rounded-xl bg-white/[0.04] border border-white/5">
-              <span className="block font-bold text-teal-300 text-[11px] font-mono uppercase">
-                02 · BUILD
-              </span>
-              <p className="text-[11px] text-slate-300 mt-0.5">
-                Provide tools for rapid venture creation.
-              </p>
-            </div>
-            <div className="p-2.5 rounded-xl bg-white/[0.04] border border-white/5">
-              <span className="block font-bold text-sky-300 text-[11px] font-mono uppercase">
-                03 · CONNECT
-              </span>
-              <p className="text-[11px] text-slate-300 mt-0.5">
-                Bridge with seasoned mentors & leaders.
-              </p>
-            </div>
-            <div className="p-2.5 rounded-xl bg-white/[0.04] border border-white/5">
-              <span className="block font-bold text-indigo-300 text-[11px] font-mono uppercase">
-                04 · CATALYSE
-              </span>
-              <p className="text-[11px] text-slate-300 mt-0.5">
-                Drive initiatives from campus to real impact.
-              </p>
-            </div>
-          </div>
-
-          <button
-            onClick={onOpenJoinModal}
-            className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition-all cursor-pointer hover:scale-[1.01]"
+      {/* ========================================================================= */}
+      {/* 3-COLUMN ARCHITECTURAL GRID: [LEFT STORY] | [DOOR VOID] | [RIGHT STORY]   */}
+      {/* ========================================================================= */}
+      <div
+        className="relative z-10 w-full max-w-[1540px] mx-auto grid grid-cols-1 md:grid-cols-[1fr_auto_1fr] items-start gap-8 lg:gap-14 xl:gap-20 will-change-transform"
+        style={{
+          transform: `translate3d(0, ${translateY}px, 0)`,
+        }}
+      >
+        {/* ========================================================================= */}
+        {/* COLUMN 1: LEFT SIDE — WHO WE ARE                                          */}
+        {/* ========================================================================= */}
+        <div className="w-full max-w-[450px] lg:max-w-[480px] text-left flex flex-col justify-start">
+          {/* Level 1: Section Label (Aligned horizontally with right side) */}
+          <div
+            className="flex items-center gap-3 h-6 mb-4 sm:mb-5 will-change-transform"
+            style={{
+              opacity: labelProgress,
+              transform: `translate3d(0, ${labelY}px, 0)`,
+            }}
           >
-            <span>Get Involved with E-Cell</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </button>
+            <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]" />
+            <span className="font-mono text-[11px] sm:text-xs font-semibold tracking-[0.22em] uppercase text-emerald-400 drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
+              WHO WE ARE
+            </span>
+            <span className="h-px w-8 bg-white/25" />
+          </div>
+
+          {/* Level 2: Monumental Editorial Headline */}
+          <h2
+            className="font-display text-5xl sm:text-6xl lg:text-7xl xl:text-[80px] text-slate-50 tracking-[-0.01em] uppercase leading-[0.90] mb-6 sm:mb-7 drop-shadow-[0_4px_24px_rgba(0,0,0,0.98)] will-change-transform"
+            style={{
+              opacity: headProgress,
+              transform: `translate3d(0, ${headY}px, 0)`,
+            }}
+          >
+            A VISION.
+            <br />
+            <span className="text-emerald-400">A MOVEMENT.</span>
+          </h2>
+
+          {/* Level 3: Short Supporting Editorial Paragraph (High Readability) */}
+          <p
+            className="text-[14px] sm:text-[15px] lg:text-[16px] text-slate-100/90 font-normal leading-[1.75] min-h-[84px] mb-8 drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] max-w-[440px] will-change-transform"
+            style={{
+              opacity: bodyProgress,
+              transform: `translate3d(0, ${bodyY}px, 0)`,
+            }}
+          >
+            Founded on 25th July 2025 at Woxsen University, E-Cell is a student-driven catalyst transforming ambition into action, innovation into opportunity, and ideas into ventures.
+          </p>
+
+          {/* Level 4: Secondary Metadata (Aligned with Right Pillars) */}
+          <div
+            className="pt-6 border-t border-white/20 max-w-[440px] will-change-transform"
+            style={{
+              opacity: bottomProgress,
+              transform: `translate3d(0, ${bottomY}px, 0)`,
+            }}
+          >
+            <div className="grid grid-cols-2 gap-6">
+              <div>
+                <span className="block font-mono text-[10px] sm:text-[11px] font-medium tracking-[0.2em] text-slate-400 uppercase mb-1.5 drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]">
+                  COMMUNITY
+                </span>
+                <span className="font-mono text-[13px] sm:text-[14px] text-white font-semibold tracking-wide drop-shadow-[0_2px_6px_rgba(0,0,0,0.95)]">
+                  6+ Schools Unified
+                </span>
+              </div>
+              <div>
+                <span className="block font-mono text-[10px] sm:text-[11px] font-medium tracking-[0.2em] text-slate-400 uppercase mb-1.5 drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]">
+                  ECOSYSTEM
+                </span>
+                <span className="font-mono text-[13px] sm:text-[14px] text-white font-semibold tracking-wide drop-shadow-[0_2px_6px_rgba(0,0,0,0.95)]">
+                  Academia × Industry
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ========================================================================= */}
+        {/* COLUMN 2: CENTER CORRIDOR (Unobstructed Negative Space for Physical Door) */}
+        {/* ========================================================================= */}
+        <div
+          className="hidden md:block w-[320px] lg:w-[380px] xl:w-[420px] shrink-0 pointer-events-none"
+          aria-hidden="true"
+        />
+
+        {/* ========================================================================= */}
+        {/* COLUMN 3: RIGHT SIDE — MISSION & PILLARS                                  */}
+        {/* ========================================================================= */}
+        <div className="w-full max-w-[450px] lg:max-w-[480px] text-left flex flex-col justify-start">
+          {/* Level 1: Section Label (Aligned horizontally with left side) */}
+          <div
+            className="flex items-center gap-3 h-6 mb-4 sm:mb-5 will-change-transform"
+            style={{
+              opacity: labelProgress,
+              transform: `translate3d(0, ${labelY}px, 0)`,
+            }}
+          >
+            <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]" />
+            <span className="font-mono text-[11px] sm:text-xs font-semibold tracking-[0.22em] uppercase text-emerald-400 drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
+              MISSION & PILLARS
+            </span>
+            <span className="h-px w-8 bg-white/25" />
+          </div>
+
+          {/* Level 2: Monumental Editorial Headline */}
+          <h2
+            className="font-display text-5xl sm:text-6xl lg:text-7xl xl:text-[80px] text-slate-50 tracking-[-0.01em] uppercase leading-[0.90] mb-6 sm:mb-7 drop-shadow-[0_4px_24px_rgba(0,0,0,0.98)] will-change-transform"
+            style={{
+              opacity: headProgress,
+              transform: `translate3d(0, ${headY}px, 0)`,
+            }}
+          >
+            IGNITING
+            <br />
+            <span className="text-emerald-400">INNOVATION.</span>
+          </h2>
+
+          {/* Level 3: Short Supporting Mission Statement (High Readability) */}
+          <p
+            className="text-[14px] sm:text-[15px] lg:text-[16px] text-slate-100/90 font-normal leading-[1.75] min-h-[84px] mb-8 drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] max-w-[440px] will-change-transform"
+            style={{
+              opacity: bodyProgress,
+              transform: `translate3d(0, ${bodyY}px, 0)`,
+            }}
+          >
+            A thriving entrepreneurial culture built through skills, mentorship, and platforms for students to create.
+          </p>
+
+          {/* Level 4: Four Pillars Editorial List (Aligned with Left Specs) */}
+          <div
+            className="pt-6 border-t border-white/20 max-w-[440px] will-change-transform"
+            style={{
+              opacity: bottomProgress,
+              transform: `translate3d(0, ${bottomY}px, 0)`,
+            }}
+          >
+            <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+              <div>
+                <div className="flex items-baseline gap-2 mb-1">
+                  <span className="font-mono text-xs font-bold text-emerald-400">01</span>
+                  <span className="font-mono text-[12px] sm:text-[13px] font-bold text-white uppercase tracking-wider drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]">
+                    INSPIRE
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300/90 leading-normal drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
+                  Ignite the founder spark.
+                </p>
+              </div>
+
+              <div>
+                <div className="flex items-baseline gap-2 mb-1">
+                  <span className="font-mono text-xs font-bold text-emerald-400">02</span>
+                  <span className="font-mono text-[12px] sm:text-[13px] font-bold text-white uppercase tracking-wider drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]">
+                    BUILD
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300/90 leading-normal drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
+                  Provide venture tools.
+                </p>
+              </div>
+
+              <div>
+                <div className="flex items-baseline gap-2 mb-1">
+                  <span className="font-mono text-xs font-bold text-emerald-400">03</span>
+                  <span className="font-mono text-[12px] sm:text-[13px] font-bold text-white uppercase tracking-wider drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]">
+                    CONNECT
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300/90 leading-normal drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
+                  Bridge with mentors.
+                </p>
+              </div>
+
+              <div>
+                <div className="flex items-baseline gap-2 mb-1">
+                  <span className="font-mono text-xs font-bold text-emerald-400">04</span>
+                  <span className="font-mono text-[12px] sm:text-[13px] font-bold text-white uppercase tracking-wider drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]">
+                    CATALYSE
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300/90 leading-normal drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
+                  Turn ideas into impact.
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   );
 }
+
+export default React.memo(DoorAboutOverlay, (prevProps, nextProps) => {
+  const prevOut = prevProps.currentFrame < 355 || prevProps.currentFrame > 415;
+  const nextOut = nextProps.currentFrame < 355 || nextProps.currentFrame > 415;
+  if (prevOut && nextOut) return true;
+  return prevProps.currentFrame === nextProps.currentFrame;
+});

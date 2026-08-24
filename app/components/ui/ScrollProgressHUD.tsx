@@ -8,7 +8,7 @@ interface ScrollProgressHUDProps {
   totalFrames: number;
 }
 
-export default function ScrollProgressHUD({
+function ScrollProgressHUD({
   currentFrame,
   totalFrames,
 }: ScrollProgressHUDProps) {
@@ -26,13 +26,13 @@ export default function ScrollProgressHUD({
   } else if (currentFrame > 395 && currentFrame < 600) {
     chapterName = "INSIDE HEADQUARTERS";
     chapterIndex = "03";
-  } else if (currentFrame >= 600 && currentFrame < 690) {
+  } else if (currentFrame >= 600 && currentFrame < 840) {
     chapterName = "FLAGSHIP INITIATIVES";
     chapterIndex = "04";
-  } else if (currentFrame >= 690 && currentFrame < 775) {
+  } else if (currentFrame >= 840 && currentFrame < 1090) {
     chapterName = "CORE LEADERSHIP";
     chapterIndex = "05";
-  } else if (currentFrame >= 775) {
+  } else if (currentFrame >= 1090) {
     chapterName = "CONNECT & COLLABORATE";
     chapterIndex = "06";
   }
@@ -67,3 +67,9 @@ export default function ScrollProgressHUD({
     </div>
   );
 }
+
+export default React.memo(ScrollProgressHUD, (prevProps, nextProps) => {
+  const prevPct = Math.round((prevProps.currentFrame / prevProps.totalFrames) * 100);
+  const nextPct = Math.round((nextProps.currentFrame / nextProps.totalFrames) * 100);
+  return prevPct === nextPct;
+});

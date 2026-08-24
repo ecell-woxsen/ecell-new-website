@@ -68,7 +68,7 @@ export default function RootLayout({
       lang="en"
       className={`${bebasNeue.variable} ${dmSans.variable} ${spaceMono.variable} dark antialiased scroll-smooth`}
     >
-      <body className="bg-[#040608] text-slate-100 font-sans selection:bg-emerald-500/30 selection:text-emerald-200 overflow-hidden min-h-screen">
+      <body className="bg-[#040608] text-slate-100 font-sans selection:bg-emerald-500/30 selection:text-emerald-200 min-h-screen">
         {children}
       </body>
     </html>

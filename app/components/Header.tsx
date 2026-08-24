@@ -10,7 +10,7 @@ interface HeaderProps {
   currentFrame: number;
 }
 
-export default function Header({
+function Header({
   onNavigateToFrame,
   onOpenJoinModal,
   currentFrame,
@@ -18,10 +18,10 @@ export default function Header({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navItems = [
-    { label: "ABOUT", frame: 378, active: currentFrame >= 365 && currentFrame < 430 },
-    { label: "EVENTS", frame: 638, active: currentFrame >= 603 && currentFrame < 685 },
-    { label: "TEAM", frame: 733, active: currentFrame >= 685 && currentFrame < 780 },
-    { label: "COMMUNITY", frame: 820, active: currentFrame >= 780 },
+    { label: "ABOUT", frame: 378, active: currentFrame >= 365 && currentFrame < 450 },
+    { label: "EVENTS", frame: 680, active: currentFrame >= 603 && currentFrame < 840 },
+    { label: "TEAM", frame: 865, active: currentFrame >= 840 && currentFrame < 1140 },
+    { label: "COMMUNITY", frame: 1260, active: currentFrame >= 1140 },
   ];
 
   return (
@@ -111,3 +111,24 @@ export default function Header({
     </header>
   );
 }
+
+export default React.memo(Header, (prevProps, nextProps) => {
+  const prevActiveAbout = prevProps.currentFrame >= 365 && prevProps.currentFrame < 450;
+  const nextActiveAbout = nextProps.currentFrame >= 365 && nextProps.currentFrame < 450;
+
+  const prevActiveEvents = prevProps.currentFrame >= 603 && prevProps.currentFrame < 840;
+  const nextActiveEvents = nextProps.currentFrame >= 603 && nextProps.currentFrame < 840;
+
+  const prevActiveTeam = prevProps.currentFrame >= 840 && prevProps.currentFrame < 1140;
+  const nextActiveTeam = nextProps.currentFrame >= 840 && nextProps.currentFrame < 1140;
+
+  const prevActiveCommunity = prevProps.currentFrame >= 1140;
+  const nextActiveCommunity = nextProps.currentFrame >= 1140;
+
+  return (
+    prevActiveAbout === nextActiveAbout &&
+    prevActiveEvents === nextActiveEvents &&
+    prevActiveTeam === nextActiveTeam &&
+    prevActiveCommunity === nextActiveCommunity
+  );
+});
