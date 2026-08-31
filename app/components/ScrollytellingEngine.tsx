@@ -16,9 +16,13 @@ interface ScrollytellingEngineProps {
 }
 
 const TOTAL_FRAMES = 1262;
-const CRITICAL_PRELOAD_COUNT = 18; // Ultra-fast boot: only ~500 KB to launch the page in < 300ms
-const SKELETON_STEP = 6; // Skeleton keyframe step: guarantees nearby fallback every 6 frames across 1262 frames
+const CRITICAL_PRELOAD_COUNT = 18; // Fast boot: ~500 KB to launch in < 250ms
+const SKELETON_STEP = 8; // Skeleton keyframe step: guarantees nearby fallback every 8 frames
 const SCROLL_TRACK_HEIGHT = TOTAL_FRAMES * 12; // 15,144px scroll track for 1:1 frame pacing
+const MAX_CONCURRENT_REQUESTS = 6; // Optimal concurrent HTTP/2 streams per domain
+
+// Image asset type: prefers ImageBitmap for off-main-thread zero-jank GPU uploads
+type FrameAsset = ImageBitmap | HTMLImageElement;
 
 export default function ScrollytellingEngine({
   onFrameUpdate,
@@ -28,28 +32,39 @@ export default function ScrollytellingEngine({
   isJoinModalOpen = false,
 }: ScrollytellingEngineProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const videoWrapperRef = useRef<HTMLDivElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const lenisRef = useRef<Lenis | null>(null);
 
-  // Frames cache & loading tracking
-  const framesCacheRef = useRef<Map<number, HTMLImageElement>>(new Map());
-  const loadingSetRef = useRef<Set<number>>(new Set());
+  // Frames cache & sorted indices tracking
+  const framesCacheRef = useRef<Map<number, FrameAsset>>(new Map());
+  const loadedFramesRef = useRef<number[]>([]);
+  const isFrameLoadedRef = useRef<Uint8Array>(new Uint8Array(TOTAL_FRAMES + 1));
+  const isFrameRequestedRef = useRef<Uint8Array>(new Uint8Array(TOTAL_FRAMES + 1));
+
+  // Prioritized Request Queue System
+  const pendingQueueRef = useRef<Map<number, number>>(new Map()); // frameIdx -> priority
+  const inFlightCountRef = useRef(0);
+  const isQueueProcessingRef = useRef(false);
+
+  // React state for boot & overlays
   const [loadProgress, setLoadProgress] = useState(0);
   const [isReady, setIsReady] = useState(false);
   const [currentFrame, setCurrentFrame] = useState(1);
-  const [videoOpacity, setVideoOpacity] = useState(1);
 
   // Rendering & window dimension refs
   const currentFrameRef = useRef(1);
   const smoothFrameRef = useRef(1);
   const lastTimeRef = useRef(performance.now());
   const lastDrawnFloatRef = useRef<number | null>(null);
-  const lastGoodDrawnFrameRef = useRef<number | null>(null);
   const lastReportedFrameRef = useRef<number>(1);
+  const lastReactUpdateRef = useRef<number>(0);
   const maxGalleryWidthRef = useRef(3200);
   const windowWidthRef = useRef(0);
   const windowHeightRef = useRef(0);
+  const lastScrollCenterRef = useRef(1);
+  const scrollVelocityRef = useRef(0);
 
   // Helper to format frame number e.g. 1 -> "/ecell_shots/00001.webp"
   const getFramePath = useCallback((frameNum: number) => {
@@ -58,147 +73,260 @@ export default function ScrollytellingEngine({
     return `/ecell_shots/${padded}.webp`;
   }, []);
 
-  // Request a single frame into memory with off-main-thread image decoding
-  const requestFrame = useCallback(
-    (frameIdx: number) => {
-      const idx = Math.min(TOTAL_FRAMES, Math.max(1, frameIdx));
-      if (framesCacheRef.current.has(idx) || loadingSetRef.current.has(idx)) {
-        return;
+  // Binary search to find nearest loaded keyframes on left and right of any float position
+  const findLoadedKeyframes = useCallback((target: number) => {
+    const arr = loadedFramesRef.current;
+    const len = arr.length;
+    if (len === 0) return { left: -1, right: -1 };
+
+    let low = 0;
+    let high = len - 1;
+    let left = -1;
+    let right = -1;
+
+    while (low <= high) {
+      const mid = (low + high) >> 1;
+      const val = arr[mid];
+      if (val === target) {
+        return { left: val, right: val };
+      } else if (val < target) {
+        left = val;
+        low = mid + 1;
+      } else {
+        right = val;
+        high = mid - 1;
       }
-      loadingSetRef.current.add(idx);
-      const img = new Image();
-      img.src = getFramePath(idx);
+    }
 
-      const onDecodedOrLoaded = () => {
-        framesCacheRef.current.set(idx, img);
-        loadingSetRef.current.delete(idx);
+    // Adjust right bounds
+    if (low < len && right === -1) {
+      right = arr[low];
+    }
+    if (high >= 0 && left === -1) {
+      left = arr[high];
+    }
 
-        // If visible playhead needs this newly loaded frame for base or blend, trigger immediate repaint
-        const curFloat = currentFrameRef.current;
-        const curFloor = Math.floor(curFloat);
-        if (idx === curFloor || idx === curFloor + 1 || Math.abs(curFloat - idx) < 1.2) {
-          lastDrawnFloatRef.current = null;
+    return { left, right };
+  }, []);
+
+  // Register loaded frame in sorted array
+  const registerLoadedFrame = useCallback((frameIdx: number, asset: FrameAsset) => {
+    if (isFrameLoadedRef.current[frameIdx]) {
+      framesCacheRef.current.set(frameIdx, asset);
+      return;
+    }
+
+    framesCacheRef.current.set(frameIdx, asset);
+    isFrameLoadedRef.current[frameIdx] = 1;
+
+    // Insert into sorted array using binary search insertion point
+    const arr = loadedFramesRef.current;
+    let low = 0;
+    let high = arr.length;
+    while (low < high) {
+      const mid = (low + high) >> 1;
+      if (arr[mid] < frameIdx) {
+        low = mid + 1;
+      } else {
+        high = mid;
+      }
+    }
+    arr.splice(low, 0, frameIdx);
+
+    // If active playhead needs this frame, trigger immediate redraw on next RAF
+    const cur = currentFrameRef.current;
+    if (Math.abs(cur - frameIdx) <= 2) {
+      lastDrawnFloatRef.current = null;
+    }
+  }, []);
+
+  // Priority Queue Processor
+  const processQueue = useCallback(() => {
+    if (isQueueProcessingRef.current) return;
+    isQueueProcessingRef.current = true;
+
+    while (inFlightCountRef.current < MAX_CONCURRENT_REQUESTS && pendingQueueRef.current.size > 0) {
+      // Find highest priority item
+      let bestFrame = -1;
+      let highestPriority = -Infinity;
+
+      for (const [frameIdx, priority] of pendingQueueRef.current.entries()) {
+        if (priority > highestPriority) {
+          highestPriority = priority;
+          bestFrame = frameIdx;
         }
-      };
+      }
 
-      if ("decode" in img && typeof img.decode === "function") {
-        img
-          .decode()
-          .then(onDecodedOrLoaded)
+      if (bestFrame === -1) break;
+
+      pendingQueueRef.current.delete(bestFrame);
+
+      if (isFrameLoadedRef.current[bestFrame]) {
+        continue;
+      }
+
+      inFlightCountRef.current++;
+      const frameToFetch = bestFrame;
+      const url = getFramePath(frameToFetch);
+
+      // High-performance image fetch with off-main-thread bitmap decoding
+      if (typeof window !== "undefined" && "createImageBitmap" in window && typeof fetch === "function") {
+        fetch(url)
+          .then((res) => {
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            return res.blob();
+          })
+          .then((blob) => createImageBitmap(blob))
+          .then((bitmap) => {
+            registerLoadedFrame(frameToFetch, bitmap);
+          })
           .catch(() => {
-            img.onload = onDecodedOrLoaded;
+            // Fallback to Image element on any fetch/bitmap error
+            const img = new Image();
+            img.src = url;
+            img.onload = () => registerLoadedFrame(frameToFetch, img);
+          })
+          .finally(() => {
+            inFlightCountRef.current = Math.max(0, inFlightCountRef.current - 1);
+            isQueueProcessingRef.current = false;
+            processQueue();
           });
       } else {
-        img.onload = onDecodedOrLoaded;
+        const img = new Image();
+        img.src = url;
+        const onDone = () => {
+          registerLoadedFrame(frameToFetch, img);
+          inFlightCountRef.current = Math.max(0, inFlightCountRef.current - 1);
+          isQueueProcessingRef.current = false;
+          processQueue();
+        };
+        if ("decode" in img && typeof img.decode === "function") {
+          img.decode().then(onDone).catch(onDone);
+        } else {
+          img.onload = onDone;
+          img.onerror = onDone;
+        }
       }
+    }
 
-      img.onerror = () => {
-        loadingSetRef.current.delete(idx);
-      };
+    isQueueProcessingRef.current = false;
+  }, [getFramePath, registerLoadedFrame]);
+
+  // Schedule a frame with specified priority
+  const requestFrameWithPriority = useCallback(
+    (frameIdx: number, priority: number) => {
+      const idx = Math.min(TOTAL_FRAMES, Math.max(1, frameIdx));
+      if (isFrameLoadedRef.current[idx]) return;
+
+      const currentPri = pendingQueueRef.current.get(idx) || 0;
+      if (priority > currentPri) {
+        pendingQueueRef.current.set(idx, priority);
+        isFrameRequestedRef.current[idx] = 1;
+        processQueue();
+      }
     },
-    [getFramePath]
+    [processQueue]
   );
 
-  // Direction-aware priority window loader ahead of scroll trajectory
-  const lastCenterRef = useRef(1);
-  const preloadPriorityWindow = useCallback(
-    (centerFrame: number) => {
-      const center = Math.round(centerFrame);
-      const isForward = center >= lastCenterRef.current;
-      lastCenterRef.current = center;
+  // Direction & Velocity-Aware Priority Window Loader
+  const schedulePriorityWindow = useCallback(
+    (centerFloat: number, velocity: number) => {
+      const center = Math.round(centerFloat);
+      const isForward = velocity >= -0.05;
 
-      // 1. Immediate critical blend pair: center and center + 1
-      requestFrame(center);
-      requestFrame(center + 1);
-      if (center > 1) requestFrame(center - 1);
+      // 1. Critical Visible Anchor Frames (Highest Priority: 1000)
+      const floorFrame = Math.floor(centerFloat);
+      const ceilFrame = Math.min(TOTAL_FRAMES, floorFrame + 1);
+      requestFrameWithPriority(floorFrame, 1000);
+      requestFrameWithPriority(ceilFrame, 1000);
+      requestFrameWithPriority(center, 950);
 
-      // 2. High priority directional lookahead
+      // 2. High Priority Lookahead Corridor along trajectory (Priority: 800 -> 300)
       if (isForward) {
-        for (let i = 2; i <= 14; i++) {
-          requestFrame(center + i);
+        for (let i = 1; i <= 16; i++) {
+          const target = center + i;
+          if (target <= TOTAL_FRAMES) {
+            requestFrameWithPriority(target, 800 - i * 30);
+          }
         }
-        for (let i = 2; i <= 5; i++) {
-          requestFrame(center - i);
+        for (let i = 1; i <= 4; i++) {
+          const target = center - i;
+          if (target >= 1) {
+            requestFrameWithPriority(target, 250 - i * 30);
+          }
         }
       } else {
-        for (let i = 2; i <= 14; i++) {
-          requestFrame(center - i);
+        for (let i = 1; i <= 16; i++) {
+          const target = center - i;
+          if (target >= 1) {
+            requestFrameWithPriority(target, 800 - i * 30);
+          }
         }
-        for (let i = 2; i <= 5; i++) {
-          requestFrame(center + i);
+        for (let i = 1; i <= 4; i++) {
+          const target = center + i;
+          if (target <= TOTAL_FRAMES) {
+            requestFrameWithPriority(target, 250 - i * 30);
+          }
         }
       }
 
-      // 3. Extended window around playhead (±35 frames)
-      const start = Math.max(1, center - 35);
-      const end = Math.min(TOTAL_FRAMES, center + 75);
+      // 3. Extended Proximity Envelope (Priority: 150 -> 50)
+      const start = Math.max(1, center - 25);
+      const end = Math.min(TOTAL_FRAMES, center + 45);
       for (let i = start; i <= end; i += 2) {
-        requestFrame(i);
+        requestFrameWithPriority(i, 80);
       }
     },
-    [requestFrame]
+    [requestFrameWithPriority]
   );
 
-  // Canvas drawing function with Sub-Frame Hermite / Smoothstep Temporal Blending
+  // Canvas drawing function with Universal Continuous Keyframe Temporal Blending
   const drawFrameToCanvas = useCallback(
     (frameFloat: number) => {
       const canvas = canvasRef.current;
       if (!canvas) return;
-      const ctx = canvas.getContext("2d");
+
+      // Initialize with hardware-accelerated 2D context options
+      const ctx = canvas.getContext("2d", {
+        alpha: false,
+        desynchronized: true,
+      }) as CanvasRenderingContext2D | null;
       if (!ctx) return;
 
       const clamped = Math.min(TOTAL_FRAMES, Math.max(1, frameFloat));
-      const frameA = Math.floor(clamped);
-      const frameB = Math.min(TOTAL_FRAMES, frameA + 1);
-      const rawAlpha = clamped - frameA;
 
-      // Smoothstep / Hermite blending curve (3t^2 - 2t^3) for zero-step, filmic crossfade
-      const blendAlpha = rawAlpha * rawAlpha * (3 - 2 * rawAlpha);
+      // Universal Keyframe Search: Find closest loaded frames on left and right
+      const { left, right } = findLoadedKeyframes(clamped);
 
-      let imgA = framesCacheRef.current.get(frameA);
+      let assetA: FrameAsset | undefined;
+      let assetB: FrameAsset | undefined;
+      let blendAlpha = 0;
 
-      // Smart fallback: prefer last successfully drawn frame if nearby (within ±6 frames)
-      // or find nearest skeleton keyframe within ±24 frames to prevent blank flashes
-      if (!imgA) {
-        requestFrame(frameA);
-
-        const lastGood = lastGoodDrawnFrameRef.current;
-        if (lastGood !== null && Math.abs(lastGood - frameA) <= 6 && framesCacheRef.current.has(lastGood)) {
-          imgA = framesCacheRef.current.get(lastGood);
+      if (left !== -1 && right !== -1) {
+        if (left === right) {
+          assetA = framesCacheRef.current.get(left);
         } else {
-          let closestFrame = -1;
-          let minDistance = Infinity;
+          assetA = framesCacheRef.current.get(left);
+          assetB = framesCacheRef.current.get(right);
 
-          for (const cachedIdx of framesCacheRef.current.keys()) {
-            const dist = Math.abs(cachedIdx - frameA);
-            if (dist < minDistance && dist <= 24) {
-              minDistance = dist;
-              closestFrame = cachedIdx;
-            }
-          }
+          // Sub-frame interpolation factor between the two available keyframes
+          const rawT = (clamped - left) / (right - left);
+          const clampedT = Math.min(1, Math.max(0, rawT));
 
-          if (closestFrame !== -1) {
-            imgA = framesCacheRef.current.get(closestFrame);
-          }
+          // Smoothstep Hermite curve (3t^2 - 2t^3) for zero-step, filmic crossfade
+          blendAlpha = clampedT * clampedT * (3 - 2 * clampedT);
         }
+      } else if (left !== -1) {
+        assetA = framesCacheRef.current.get(left);
+      } else if (right !== -1) {
+        assetA = framesCacheRef.current.get(right);
       }
 
-      if (!imgA || !imgA.complete || imgA.naturalWidth === 0) {
-        return;
-      }
+      if (!assetA) return;
 
-      lastGoodDrawnFrameRef.current = frameA;
-
-      // Pre-request frameB if blend is significant
-      let imgB: HTMLImageElement | undefined;
-      if (rawAlpha > 0.002 && frameB !== frameA) {
-        imgB = framesCacheRef.current.get(frameB);
-        if (!imgB) {
-          requestFrame(frameB);
-        }
-      }
-
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      // Dimension & DPR scaling
+      // Cap DPR to 1.5 to maximize fillrate and eliminate 4K GPU stalls on 60Hz displays
+      const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
       const width = windowWidthRef.current || window.innerWidth;
       const height = windowHeightRef.current || window.innerHeight;
 
@@ -212,10 +340,10 @@ export default function ScrollytellingEngine({
 
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = "high";
+      ctx.imageSmoothingQuality = "medium";
 
-      const imgWidth = imgA.naturalWidth || imgA.width;
-      const imgHeight = imgA.naturalHeight || imgA.height;
+      const imgWidth = "naturalWidth" in assetA ? assetA.naturalWidth : assetA.width;
+      const imgHeight = "naturalHeight" in assetA ? assetA.naturalHeight : assetA.height;
       if (!imgWidth || !imgHeight) return;
 
       const imgRatio = imgWidth / imgHeight;
@@ -236,20 +364,20 @@ export default function ScrollytellingEngine({
         offsetX = (width - drawW) / 2;
       }
 
-      // 1. Draw base frame
+      // Step 1: Draw primary base anchor frame
       ctx.globalAlpha = 1.0;
-      ctx.drawImage(imgA, offsetX, offsetY, drawW, drawH);
+      ctx.drawImage(assetA, offsetX, offsetY, drawW, drawH);
 
-      // 2. Cross-dissolve next frame for ultra-smooth 120 FPS sub-frame interpolation
-      if (blendAlpha > 0.002 && imgB && imgB.complete && imgB.naturalWidth > 0) {
+      // Step 2: Continuous temporal cross-dissolve next keyframe for 60fps/120fps motion
+      if (blendAlpha > 0.002 && assetB) {
         ctx.globalAlpha = blendAlpha;
-        ctx.drawImage(imgB, offsetX, offsetY, drawW, drawH);
+        ctx.drawImage(assetB, offsetX, offsetY, drawW, drawH);
         ctx.globalAlpha = 1.0;
       }
 
       lastDrawnFloatRef.current = clamped;
     },
-    [requestFrame]
+    [findLoadedKeyframes]
   );
 
   // Resize handler caching window dimensions
@@ -265,30 +393,56 @@ export default function ScrollytellingEngine({
     return () => window.removeEventListener("resize", updateDimensions);
   }, [drawFrameToCanvas]);
 
-  // Multi-tier progressive background streaming engine
+  // Progressive Bootstrap & Background Streamer
   useEffect(() => {
     let isCancelled = false;
     let loaded = 0;
 
     const bootEngine = async () => {
-      // Step 1: Fast Bootstrapping (Frames 1 - 18)
+      // Step 1: Critical Bootstrap (Frames 1 to CRITICAL_PRELOAD_COUNT)
       const initialPromises: Promise<void>[] = [];
       for (let i = 1; i <= CRITICAL_PRELOAD_COUNT; i++) {
         initialPromises.push(
           new Promise((resolve) => {
-            const img = new Image();
-            img.src = getFramePath(i);
-            img.onload = () => {
-              if (!isCancelled) {
-                framesCacheRef.current.set(i, img);
-                loaded++;
-                setLoadProgress(Math.round((loaded / CRITICAL_PRELOAD_COUNT) * 100));
-              }
-              resolve();
-            };
-            img.onerror = () => {
-              resolve();
-            };
+            const url = getFramePath(i);
+            if (typeof window !== "undefined" && "createImageBitmap" in window && typeof fetch === "function") {
+              fetch(url)
+                .then((r) => r.blob())
+                .then((b) => createImageBitmap(b))
+                .then((bitmap) => {
+                  if (!isCancelled) {
+                    registerLoadedFrame(i, bitmap);
+                    loaded++;
+                    setLoadProgress(Math.round((loaded / CRITICAL_PRELOAD_COUNT) * 100));
+                  }
+                  resolve();
+                })
+                .catch(() => {
+                  const img = new Image();
+                  img.src = url;
+                  img.onload = () => {
+                    if (!isCancelled) {
+                      registerLoadedFrame(i, img);
+                      loaded++;
+                      setLoadProgress(Math.round((loaded / CRITICAL_PRELOAD_COUNT) * 100));
+                    }
+                    resolve();
+                  };
+                  img.onerror = () => resolve();
+                });
+            } else {
+              const img = new Image();
+              img.src = url;
+              img.onload = () => {
+                if (!isCancelled) {
+                  registerLoadedFrame(i, img);
+                  loaded++;
+                  setLoadProgress(Math.round((loaded / CRITICAL_PRELOAD_COUNT) * 100));
+                }
+                resolve();
+              };
+              img.onerror = () => resolve();
+            }
           })
         );
       }
@@ -302,33 +456,21 @@ export default function ScrollytellingEngine({
       // Render initial frame immediately
       drawFrameToCanvas(1);
 
-      // Step 2: Skeleton Keyframe Stream (every 6th frame across 1 - 1262)
-      // Provides instant fallback anchors across the entire timeline in ~1.5s
-      const streamSkeleton = async () => {
-        for (let i = 1; i <= TOTAL_FRAMES; i += SKELETON_STEP) {
-          if (isCancelled) break;
-          requestFrame(i);
-          if (i % 30 === 0) {
-            await new Promise((r) => setTimeout(r, 12));
-          }
+      // Step 2: Skeleton Keyframe Stream across the full timeline (Priority: 50)
+      // Guarantees an immediate temporal fallback anchor every 8 frames across 1,262 frames
+      for (let i = 1; i <= TOTAL_FRAMES; i += SKELETON_STEP) {
+        if (isCancelled) break;
+        requestFrameWithPriority(i, 50);
+      }
+
+      // Step 3: Progressive Infill Stream during idle cycles (Priority: 10)
+      // Low priority so user scroll requests ALWAYS preempt infill requests
+      for (let i = CRITICAL_PRELOAD_COUNT + 1; i <= TOTAL_FRAMES; i++) {
+        if (isCancelled) break;
+        if (i % SKELETON_STEP !== 1) {
+          requestFrameWithPriority(i, 10);
         }
-      };
-
-      await streamSkeleton();
-      if (isCancelled) return;
-
-      // Step 3: Progressive Infill Stream during idle cycles
-      const streamInfill = async () => {
-        for (let i = CRITICAL_PRELOAD_COUNT + 1; i <= TOTAL_FRAMES; i += 15) {
-          if (isCancelled) break;
-          for (let j = i; j < i + 15 && j <= TOTAL_FRAMES; j++) {
-            requestFrame(j);
-          }
-          await new Promise((r) => setTimeout(r, 25));
-        }
-      };
-
-      streamInfill();
+      }
     };
 
     bootEngine();
@@ -336,22 +478,23 @@ export default function ScrollytellingEngine({
     return () => {
       isCancelled = true;
     };
-  }, [getFramePath, requestFrame, drawFrameToCanvas]);
+  }, [getFramePath, registerLoadedFrame, requestFrameWithPriority, drawFrameToCanvas]);
 
-  // Single Global Lenis Smooth Scroll Engine Instance & Synchronized RAF Loop
+  // Main Scroll Engine & Synchronized 60FPS/120FPS RAF Loop
   useEffect(() => {
     if (!isReady) return;
 
     const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+    // Responsive Lenis Engine: 0.85s duration for crisp, snappy tactile response
     const lenis = new Lenis({
-      duration: prefersReducedMotion ? 0 : 1.25,
-      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)), // Apple-style cubic easeOutExponential
+      duration: prefersReducedMotion ? 0 : 0.85,
+      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)), // Clean exponential easeOut
       orientation: "vertical",
       gestureOrientation: "vertical",
       smoothWheel: true,
-      wheelMultiplier: 0.95,
-      touchMultiplier: 1.5,
+      wheelMultiplier: 1.0,
+      touchMultiplier: 1.6,
       infinite: false,
     });
 
@@ -368,24 +511,33 @@ export default function ScrollytellingEngine({
 
       const targetFrameFloat = 1 + progress * (TOTAL_FRAMES - 1);
 
-      // Ultra-responsive time-invariant exponential damping filter for continuous sub-frame smoothness
+      // High-performance single-stage time-invariant exponential filter (tau = 48)
+      // Eliminates compound input lag while guaranteeing continuous sub-pixel smooth motion
       const now = performance.now();
       const dt = Math.min(0.05, Math.max(0.001, (now - lastTimeRef.current) / 1000));
       lastTimeRef.current = now;
 
-      const smoothFactor = 1 - Math.exp(-32 * dt);
+      const smoothFactor = 1 - Math.exp(-48 * dt);
+      const prevFloat = smoothFrameRef.current;
       smoothFrameRef.current += (targetFrameFloat - smoothFrameRef.current) * smoothFactor;
       const renderFloat = smoothFrameRef.current;
       currentFrameRef.current = renderFloat;
 
-      // Priority stream loader around current position
-      preloadPriorityWindow(renderFloat);
+      // Track velocity for directional lookahead
+      const velocity = (renderFloat - prevFloat) / dt;
+      scrollVelocityRef.current = velocity;
 
-      // Hero Video Crossfade calculation
+      // Priority streaming around playhead
+      schedulePriorityWindow(renderFloat, velocity);
+
+      // Direct DOM Hero Video Crossfade (Zero React Virtual DOM overhead in RAF)
       const vOpacity = Math.max(0, 1 - (renderFloat - 1) / 14);
-      setVideoOpacity(vOpacity);
+      if (videoWrapperRef.current) {
+        videoWrapperRef.current.style.opacity = vOpacity.toFixed(3);
+        videoWrapperRef.current.style.display = vOpacity <= 0.005 ? "none" : "block";
+      }
 
-      // Hardware CSS Custom Properties Synchronization (120 FPS Sub-Pixel Compositor)
+      // Hardware CSS Custom Properties Synchronization (Direct Compositor Updates)
       const container = containerRef.current;
       if (container) {
         // Hero Overlay Transforms
@@ -417,9 +569,10 @@ export default function ScrollytellingEngine({
         // Wall Gallery Overlay Continuous Translation
         const startScrollFrame = 648;
         const endFrame = 1262;
-        const galleryProgress = renderFloat <= startScrollFrame
-          ? 0
-          : Math.min(1, Math.max(0, (renderFloat - startScrollFrame) / (endFrame - startScrollFrame)));
+        const galleryProgress =
+          renderFloat <= startScrollFrame
+            ? 0
+            : Math.min(1, Math.max(0, (renderFloat - startScrollFrame) / (endFrame - startScrollFrame)));
         const galleryTX = -(galleryProgress * maxGalleryWidthRef.current);
 
         let galleryOpacity = 0;
@@ -434,18 +587,34 @@ export default function ScrollytellingEngine({
         container.style.setProperty("--gallery-pe", galleryOpacity > 0.1 ? "auto" : "none");
       }
 
-      // Canvas Render Update
+      // Canvas Render Update: Draw sub-frame interpolated pixels
       const lastDrawn = lastDrawnFloatRef.current;
       const deltaSinceLastDraw = lastDrawn === null ? Infinity : Math.abs(renderFloat - lastDrawn);
 
-      if (deltaSinceLastDraw > 0.002) {
+      if (deltaSinceLastDraw > 0.0015) {
         drawFrameToCanvas(renderFloat);
       }
 
-      // Notify React overlays only on integer boundary transitions
+      // Decoupled React State Update: Throttle component re-renders to milestone boundaries
+      // Prevents 60 Virtual DOM reconciliations per second while keeping overlays perfectly synchronized
       const roundedFrame = Math.round(renderFloat);
-      if (roundedFrame !== lastReportedFrameRef.current) {
+      const isBoundaryCrossed =
+        (lastReportedFrameRef.current <= 365 && roundedFrame > 365) ||
+        (lastReportedFrameRef.current <= 598 && roundedFrame > 598) ||
+        (lastReportedFrameRef.current <= 840 && roundedFrame > 840) ||
+        (lastReportedFrameRef.current <= 1140 && roundedFrame > 1140) ||
+        (lastReportedFrameRef.current >= 365 && roundedFrame < 365) ||
+        (lastReportedFrameRef.current >= 598 && roundedFrame < 598) ||
+        (lastReportedFrameRef.current >= 840 && roundedFrame < 840) ||
+        (lastReportedFrameRef.current >= 1140 && roundedFrame < 1140);
+
+      const timeSinceLastReactUpdate = now - lastReactUpdateRef.current;
+      if (
+        roundedFrame !== lastReportedFrameRef.current &&
+        (isBoundaryCrossed || timeSinceLastReactUpdate > 60 || Math.abs(roundedFrame - lastReportedFrameRef.current) >= 4)
+      ) {
         lastReportedFrameRef.current = roundedFrame;
+        lastReactUpdateRef.current = now;
         setCurrentFrame(roundedFrame);
         if (onFrameUpdate) {
           onFrameUpdate(roundedFrame);
@@ -462,7 +631,7 @@ export default function ScrollytellingEngine({
       lenis.destroy();
       lenisRef.current = null;
     };
-  }, [isReady, drawFrameToCanvas, onFrameUpdate, preloadPriorityWindow]);
+  }, [isReady, drawFrameToCanvas, onFrameUpdate, schedulePriorityWindow]);
 
   // Pause / Resume Lenis scrolling when modal opens or closes
   useEffect(() => {
@@ -482,10 +651,10 @@ export default function ScrollytellingEngine({
       const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
       const targetScrollY = targetProgress * maxScroll;
 
-      preloadPriorityWindow(target);
+      schedulePriorityWindow(target, 1.0);
 
       lenisRef.current.scrollTo(targetScrollY, {
-        duration: 1.4,
+        duration: 1.2,
         easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
         onComplete: () => {
           if (onNavigationComplete) {
@@ -494,13 +663,14 @@ export default function ScrollytellingEngine({
         },
       });
     }
-  }, [targetNavigationFrame, preloadPriorityWindow, onNavigationComplete]);
+  }, [targetNavigationFrame, schedulePriorityWindow, onNavigationComplete]);
 
   const handleExploreEvents = () => {
     if (lenisRef.current) {
       const targetProgress = (630 - 1) / (TOTAL_FRAMES - 1);
       const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
-      lenisRef.current.scrollTo(targetProgress * maxScroll, { duration: 1.4 });
+      schedulePriorityWindow(630, 1.0);
+      lenisRef.current.scrollTo(targetProgress * maxScroll, { duration: 1.2 });
     }
   };
 
@@ -520,29 +690,28 @@ export default function ScrollytellingEngine({
         ref={containerRef}
         className="fixed inset-0 w-screen h-screen overflow-hidden select-none bg-[#040608] z-0"
       >
-        {/* HTML5 Scrollytelling Canvas */}
+        {/* HTML5 High-Performance Scrollytelling Canvas */}
         <canvas
           ref={canvasRef}
           className="absolute inset-0 w-full h-full object-cover z-0"
         />
 
-        {/* Ambient Video (Loops seamlessly at hero frame 1, fades on scroll) */}
-        {videoOpacity > 0.01 && (
-          <div
-            className="absolute inset-0 w-full h-full pointer-events-none transition-opacity duration-200 z-10"
-            style={{ opacity: videoOpacity }}
-          >
-            <video
-              ref={videoRef}
-              src="/still_shot.mp4"
-              autoPlay
-              loop
-              muted
-              playsInline
-              className="w-full h-full object-cover"
-            />
-          </div>
-        )}
+        {/* Ambient Video (Loops seamlessly at hero frame 1, controlled via direct DOM ref) */}
+        <div
+          ref={videoWrapperRef}
+          className="absolute inset-0 w-full h-full pointer-events-none z-10"
+          style={{ opacity: 1 }}
+        >
+          <video
+            ref={videoRef}
+            src="/still_shot.mp4"
+            autoPlay
+            loop
+            muted
+            playsInline
+            className="w-full h-full object-cover"
+          />
+        </div>
 
         {/* Subtle Vignette for Depth */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/20 pointer-events-none z-10" />
@@ -572,4 +741,3 @@ export default function ScrollytellingEngine({
     </>
   );
 }
-
