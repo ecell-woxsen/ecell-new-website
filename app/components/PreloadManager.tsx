@@ -3,6 +3,7 @@
 import React from "react";
 import Image from "next/image";
 import { Sparkles } from "lucide-react";
+import { getAssetUrl } from "../lib/assets";
 
 interface PreloadManagerProps {
   progress: number;
@@ -34,7 +35,7 @@ export default function PreloadManager({ progress, isReady }: PreloadManagerProp
         {/* E-Cell Logo */}
         <div className="relative w-20 h-20 mb-6 rounded-2xl bg-slate-900/90 border border-white/20 p-3 shadow-2xl flex items-center justify-center overflow-hidden">
           <Image
-            src="/ecell-logo.png"
+            src={getAssetUrl("/ecell-logo.png")}
             alt="E-Cell Woxsen Logo"
             width={70}
             height={70}

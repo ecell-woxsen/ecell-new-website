@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "upload:r2": "bun run scripts/upload-to-r2.ts"
   },
   "dependencies": {
     "lenis": "^1.3.26",

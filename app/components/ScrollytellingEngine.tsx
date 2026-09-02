@@ -6,6 +6,7 @@ import PreloadManager from "./PreloadManager";
 import HeroOverlay from "./overlays/HeroOverlay";
 import DoorAboutOverlay from "./overlays/DoorAboutOverlay";
 import WallGalleryOverlay from "./overlays/WallGalleryOverlay";
+import { getAssetUrl, getFrameUrl } from "../lib/assets";
 
 interface ScrollytellingEngineProps {
   onFrameUpdate?: (frame: number) => void;
@@ -66,11 +67,9 @@ export default function ScrollytellingEngine({
   const lastScrollCenterRef = useRef(1);
   const scrollVelocityRef = useRef(0);
 
-  // Helper to format frame number e.g. 1 -> "/ecell_shots/00001.webp"
+  // Helper to format frame CDN URL e.g. 1 -> "https://pub-...r2.dev/ecell_shots/00001.webp"
   const getFramePath = useCallback((frameNum: number) => {
-    const clamped = Math.min(TOTAL_FRAMES, Math.max(1, frameNum));
-    const padded = String(clamped).padStart(5, "0");
-    return `/ecell_shots/${padded}.webp`;
+    return getFrameUrl(frameNum);
   }, []);
 
   // Binary search to find nearest loaded keyframes on left and right of any float position
@@ -183,6 +182,7 @@ export default function ScrollytellingEngine({
           .catch(() => {
             // Fallback to Image element on any fetch/bitmap error
             const img = new Image();
+            img.crossOrigin = "anonymous";
             img.src = url;
             img.onload = () => registerLoadedFrame(frameToFetch, img);
           })
@@ -193,6 +193,7 @@ export default function ScrollytellingEngine({
           });
       } else {
         const img = new Image();
+        img.crossOrigin = "anonymous";
         img.src = url;
         const onDone = () => {
           registerLoadedFrame(frameToFetch, img);
@@ -704,7 +705,7 @@ export default function ScrollytellingEngine({
         >
           <video
             ref={videoRef}
-            src="/still_shot.mp4"
+            src={getAssetUrl("/still_shot.mp4")}
             autoPlay
             loop
             muted

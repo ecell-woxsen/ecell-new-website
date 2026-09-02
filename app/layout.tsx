@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Bebas_Neue, DM_Sans, Space_Mono } from "next/font/google";
 import "./globals.css";
+import { getAssetUrl } from "./lib/assets";
 
 const bebasNeue = Bebas_Neue({
   weight: "400",
@@ -38,7 +39,7 @@ export const metadata: Metadata = {
     "Innovation",
   ],
   icons: {
-    icon: "/ecell-logo.png",
+    icon: getAssetUrl("/ecell-logo.png"),
   },
   openGraph: {
     title: "E-Cell Woxsen — Where Builders Start",
@@ -48,7 +49,7 @@ export const metadata: Metadata = {
     siteName: "E-Cell Woxsen University",
     images: [
       {
-        url: "/ecell-logo.png",
+        url: getAssetUrl("/ecell-logo.png"),
         width: 800,
         height: 800,
       },

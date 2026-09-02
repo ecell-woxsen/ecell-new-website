@@ -2,6 +2,7 @@
 
 import React from "react";
 import Image from "next/image";
+import { getAssetUrl } from "../../lib/assets";
 
 interface EventsWallSectionProps {
   currentFrame?: number;
@@ -120,7 +121,7 @@ export default function EventsWallSection({
               className="relative z-10 w-full max-w-[540px] lg:max-w-[620px] aspect-[16/9.5] rounded-xl sm:rounded-2xl overflow-hidden border border-white/15 shadow-[0_20px_45px_rgba(0,0,0,0.85)] group transition-all duration-500 hover:border-emerald-400/40"
             >
               <Image
-                src={event.image}
+                src={getAssetUrl(event.image)}
                 alt={event.alt}
                 fill
                 className="object-cover transition-transform duration-700 ease-out group-hover:scale-[1.02]"

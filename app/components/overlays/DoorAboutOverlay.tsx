@@ -2,6 +2,7 @@
 
 import React from "react";
 import Image from "next/image";
+import { getAssetUrl } from "../../lib/assets";
 
 interface DoorAboutOverlayProps {
   currentFrame: number;
@@ -153,7 +154,7 @@ function DoorAboutOverlay({
         >
           <div className="relative w-44 h-44 sm:w-56 sm:h-56 md:w-64 md:h-64 lg:w-72 lg:h-72 xl:w-80 xl:h-80 flex items-center justify-center">
             <Image
-              src="/ecell-logo.png"
+              src={getAssetUrl("/ecell-logo.png")}
               alt="E-Cell Woxsen Logo"
               width={320}
               height={320}

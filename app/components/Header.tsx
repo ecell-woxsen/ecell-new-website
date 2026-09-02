@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import Image from "next/image";
 import { ArrowRight, Menu, X } from "lucide-react";
+import { getAssetUrl } from "../lib/assets";
 
 interface HeaderProps {
   onNavigateToFrame: (targetFrame: number) => void;
@@ -37,7 +38,7 @@ function Header({
           >
             <div className="relative w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-slate-900/90 border border-white/15 p-1 flex items-center justify-center overflow-hidden">
               <Image
-                src="/ecell-logo.png"
+                src={getAssetUrl("/ecell-logo.png")}
                 alt="E-Cell Logo"
                 width={28}
                 height={28}
