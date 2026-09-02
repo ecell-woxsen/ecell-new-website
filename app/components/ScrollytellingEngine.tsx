@@ -22,8 +22,83 @@ const SKELETON_STEP = 8; // Skeleton keyframe step: guarantees nearby fallback e
 const SCROLL_TRACK_HEIGHT = TOTAL_FRAMES * 12; // 15,144px scroll track for 1:1 frame pacing
 const MAX_CONCURRENT_REQUESTS = 6; // Optimal concurrent HTTP/2 streams per domain
 
-// Image asset type: prefers ImageBitmap for off-main-thread zero-jank GPU uploads
-type FrameAsset = ImageBitmap | HTMLImageElement;
+// Image asset type: HTMLImageElement decoded asynchronously off-main-thread
+type FrameAsset = HTMLImageElement;
+
+/**
+ * Robust Cross-Browser Frame Loader
+ * Works seamlessly across Safari, iOS Safari, Chrome, Edge, and Firefox.
+ * Handles Safari CORS cache partitioning, synchronous memory cache hits,
+ * off-thread async decoding, and includes safety timeouts to prevent hangs.
+ */
+function loadFrameAsset(url: string, timeoutMs = 4000): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.decoding = "async";
+
+    let settled = false;
+    let timer: any = null;
+
+    const cleanup = () => {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      img.onload = null;
+      img.onerror = null;
+    };
+
+    const done = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(img);
+    };
+
+    const fail = (err?: any) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(err || new Error(`Failed to load ${url}`));
+    };
+
+    // Safety timeout: prevents hung network requests from deadlocking the queue
+    timer = setTimeout(() => {
+      if (!settled) {
+        if (img.complete && img.naturalWidth > 0) {
+          done();
+        } else {
+          fail(new Error(`Timeout loading ${url}`));
+        }
+      }
+    }, timeoutMs);
+
+    img.onload = () => {
+      if ("decode" in img && typeof img.decode === "function") {
+        img.decode().then(done).catch(done);
+      } else {
+        done();
+      }
+    };
+
+    img.onerror = (e) => {
+      fail(e);
+    };
+
+    // Set src AFTER attaching handlers
+    img.src = url;
+
+    // Instant cache hit check (vital for Safari / WebKit memory & disk cache)
+    if (img.complete && img.naturalWidth > 0) {
+      if ("decode" in img && typeof img.decode === "function") {
+        img.decode().then(done).catch(done);
+      } else {
+        done();
+      }
+    }
+  });
+}
 
 export default function ScrollytellingEngine({
   onFrameUpdate,
@@ -168,46 +243,19 @@ export default function ScrollytellingEngine({
       const frameToFetch = bestFrame;
       const url = getFramePath(frameToFetch);
 
-      // High-performance image fetch with off-main-thread bitmap decoding
-      if (typeof window !== "undefined" && "createImageBitmap" in window && typeof fetch === "function") {
-        fetch(url)
-          .then((res) => {
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            return res.blob();
-          })
-          .then((blob) => createImageBitmap(blob))
-          .then((bitmap) => {
-            registerLoadedFrame(frameToFetch, bitmap);
-          })
-          .catch(() => {
-            // Fallback to Image element on any fetch/bitmap error
-            const img = new Image();
-            img.crossOrigin = "anonymous";
-            img.src = url;
-            img.onload = () => registerLoadedFrame(frameToFetch, img);
-          })
-          .finally(() => {
-            inFlightCountRef.current = Math.max(0, inFlightCountRef.current - 1);
-            isQueueProcessingRef.current = false;
-            processQueue();
-          });
-      } else {
-        const img = new Image();
-        img.crossOrigin = "anonymous";
-        img.src = url;
-        const onDone = () => {
+      // Robust universal frame loader with async decoding & safety timeout
+      loadFrameAsset(url, 4000)
+        .then((img) => {
           registerLoadedFrame(frameToFetch, img);
+        })
+        .catch(() => {
+          // Graceful fallback: frame will be requested again if playhead stays nearby
+        })
+        .finally(() => {
           inFlightCountRef.current = Math.max(0, inFlightCountRef.current - 1);
           isQueueProcessingRef.current = false;
           processQueue();
-        };
-        if ("decode" in img && typeof img.decode === "function") {
-          img.decode().then(onDone).catch(onDone);
-        } else {
-          img.onload = onDone;
-          img.onerror = onDone;
-        }
-      }
+        });
     }
 
     isQueueProcessingRef.current = false;
@@ -287,10 +335,9 @@ export default function ScrollytellingEngine({
       const canvas = canvasRef.current;
       if (!canvas) return;
 
-      // Initialize with hardware-accelerated 2D context options
+      // Hardware-accelerated 2D context (standard alpha: false, Safari-compliant)
       const ctx = canvas.getContext("2d", {
         alpha: false,
-        desynchronized: true,
       }) as CanvasRenderingContext2D | null;
       if (!ctx) return;
 
@@ -343,8 +390,8 @@ export default function ScrollytellingEngine({
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "medium";
 
-      const imgWidth = "naturalWidth" in assetA ? assetA.naturalWidth : assetA.width;
-      const imgHeight = "naturalHeight" in assetA ? assetA.naturalHeight : assetA.height;
+      const imgWidth = "naturalWidth" in assetA ? assetA.naturalWidth : (assetA as any).width;
+      const imgHeight = "naturalHeight" in assetA ? assetA.naturalHeight : (assetA as any).height;
       if (!imgWidth || !imgHeight) return;
 
       const imgRatio = imgWidth / imgHeight;
@@ -401,54 +448,37 @@ export default function ScrollytellingEngine({
 
     const bootEngine = async () => {
       // Step 1: Critical Bootstrap (Frames 1 to CRITICAL_PRELOAD_COUNT)
+      const preloadCount = CRITICAL_PRELOAD_COUNT;
       const initialPromises: Promise<void>[] = [];
-      for (let i = 1; i <= CRITICAL_PRELOAD_COUNT; i++) {
-        initialPromises.push(
-          new Promise((resolve) => {
-            const url = getFramePath(i);
-            if (typeof window !== "undefined" && "createImageBitmap" in window && typeof fetch === "function") {
-              fetch(url)
-                .then((r) => r.blob())
-                .then((b) => createImageBitmap(b))
-                .then((bitmap) => {
-                  if (!isCancelled) {
-                    registerLoadedFrame(i, bitmap);
-                    loaded++;
-                    setLoadProgress(Math.round((loaded / CRITICAL_PRELOAD_COUNT) * 100));
-                  }
-                  resolve();
-                })
-                .catch(() => {
-                  const img = new Image();
-                  img.src = url;
-                  img.onload = () => {
-                    if (!isCancelled) {
-                      registerLoadedFrame(i, img);
-                      loaded++;
-                      setLoadProgress(Math.round((loaded / CRITICAL_PRELOAD_COUNT) * 100));
-                    }
-                    resolve();
-                  };
-                  img.onerror = () => resolve();
-                });
-            } else {
-              const img = new Image();
-              img.src = url;
-              img.onload = () => {
-                if (!isCancelled) {
-                  registerLoadedFrame(i, img);
-                  loaded++;
-                  setLoadProgress(Math.round((loaded / CRITICAL_PRELOAD_COUNT) * 100));
-                }
-                resolve();
-              };
-              img.onerror = () => resolve();
+
+      for (let i = 1; i <= preloadCount; i++) {
+        const url = getFramePath(i);
+        const p = loadFrameAsset(url, 3000)
+          .then((img) => {
+            if (!isCancelled) {
+              registerLoadedFrame(i, img);
             }
           })
-        );
+          .catch(() => {
+            // Non-blocking: continue even if a single frame takes longer
+          })
+          .finally(() => {
+            if (!isCancelled) {
+              loaded++;
+              setLoadProgress(Math.min(100, Math.round((loaded / preloadCount) * 100)));
+            }
+          });
+        initialPromises.push(p);
       }
 
-      await Promise.all(initialPromises);
+      // Fast-boot timeout: if network is slow, boot after max 2.2s so user is never stuck
+      const maxWaitTimeout = new Promise<void>((resolve) => setTimeout(resolve, 2200));
+
+      await Promise.race([
+        Promise.all(initialPromises),
+        maxWaitTimeout,
+      ]);
+
       if (isCancelled) return;
 
       setIsReady(true);
@@ -466,7 +496,7 @@ export default function ScrollytellingEngine({
 
       // Step 3: Progressive Infill Stream during idle cycles (Priority: 10)
       // Low priority so user scroll requests ALWAYS preempt infill requests
-      for (let i = CRITICAL_PRELOAD_COUNT + 1; i <= TOTAL_FRAMES; i++) {
+      for (let i = preloadCount + 1; i <= TOTAL_FRAMES; i++) {
         if (isCancelled) break;
         if (i % SKELETON_STEP !== 1) {
           requestFrameWithPriority(i, 10);
@@ -666,6 +696,13 @@ export default function ScrollytellingEngine({
     }
   }, [targetNavigationFrame, schedulePriorityWindow, onNavigationComplete]);
 
+  // Autoplay video loop for Safari compatibility
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.play().catch(() => {});
+    }
+  }, []);
+
   const handleExploreEvents = () => {
     if (lenisRef.current) {
       const targetProgress = (630 - 1) / (TOTAL_FRAMES - 1);
@@ -710,6 +747,7 @@ export default function ScrollytellingEngine({
             loop
             muted
             playsInline
+            preload="auto"
             className="w-full h-full object-cover"
           />
         </div>
