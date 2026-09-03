@@ -20,16 +20,51 @@ const TOTAL_FRAMES = 1262;
 const CRITICAL_PRELOAD_COUNT = 24; // Contiguous initial runway for instant butter-smooth boot
 const SCROLL_TRACK_HEIGHT = TOTAL_FRAMES * 12; // 15,144px scroll track for 1:1 frame pacing
 const MAX_CONCURRENT_REQUESTS = 6; // Optimal concurrent HTTP/2 streams per domain
-const LOOKAHEAD_FORWARD = 35; // Tier 1: Compressed Blob lookahead
-const LOOKAHEAD_BACKWARD = 10; // Tier 1: Compressed Blob safety buffer behind
-const MAX_BLOB_CACHE_SIZE = 220; // Tier 1: Max compressed Blobs in memory (~11 MB)
-const NEAR_BITMAP_FORWARD = 14; // Tier 2: Active GPU bitmaps ahead (~115 MB)
-const NEAR_BITMAP_BACKWARD = 4; // Tier 2: Active GPU bitmaps behind (~33 MB, total ~148 MB GPU memory)
-const BITMAP_EVICT_MARGIN = 6; // Tier 2: Safety padding before bitmap eviction
-const CANCEL_DISTANCE = 55; // Distance threshold to abort out-of-range in-flight network requests
+const LOOKAHEAD_FORWARD = 35; // Contiguous lookahead corridor ahead of playhead
+const LOOKAHEAD_BACKWARD = 10; // Safety buffer behind the playhead (Total buffer: ~45 frames ≈ 370 MB)
+const MAX_CACHE_SIZE = 58; // Hysteresis limit: only evicts when cache exceeds 58 frames
+const CANCEL_DISTANCE = 50; // Distance threshold to abort out-of-range in-flight network requests
 
 // Image asset type: ImageBitmap (decoded off-main-thread) or HTMLImageElement fallback
 type FrameAsset = ImageBitmap | HTMLImageElement;
+
+/**
+ * Single-Pass Ahead-Of-Time (AOT) Frame Loader
+ * Fetches 1080p WebP and decodes natively off-main-thread directly into GPU-ready ImageBitmaps.
+ * Avoids software resampling overhead and eliminates all Just-In-Time decode delays during scroll.
+ */
+async function loadFrameAsset(
+  url: string,
+  signal?: AbortSignal
+): Promise<FrameAsset> {
+  const res = await fetch(url, { signal, cache: "force-cache" });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const blob = await res.blob();
+
+  // Fast native GPU texture decoding (No slow CPU software downsampling)
+  if (typeof window !== "undefined" && "createImageBitmap" in window) {
+    try {
+      return await createImageBitmap(blob);
+    } catch {
+      // Fallback below
+    }
+  }
+
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    const objectUrl = URL.createObjectURL(blob);
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(img);
+    };
+    img.onerror = (e) => {
+      URL.revokeObjectURL(objectUrl);
+      reject(e);
+    };
+    img.src = objectUrl;
+  });
+}
 
 export default function ScrollytellingEngine({
   onFrameUpdate,
@@ -44,20 +79,12 @@ export default function ScrollytellingEngine({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const lenisRef = useRef<Lenis | null>(null);
 
-  // =========================================================================
-  // TWO-TIER MEMORY ARCHITECTURE (85–90% RAM Reduction)
-  // =========================================================================
-  // Tier 1: Compressed WebP Blobs (~50 KB each; ~10 MB for 200 frames)
-  const blobCacheRef = useRef<Map<number, Blob>>(new Map());
-  const isBlobLoadedRef = useRef<Uint8Array>(new Uint8Array(TOTAL_FRAMES + 1));
-
-  // Tier 2: Active Uncompressed GPU ImageBitmaps (~8.3 MB each; strictly ~18 frames ≈ 140 MB)
-  const bitmapCacheRef = useRef<Map<number, FrameAsset>>(new Map());
-  const inFlightDecodesRef = useRef<Set<number>>(new Set());
-
-  // Active network download controllers
+  // Streamlined Ahead-Of-Time Frames Cache (~370 MB RAM bound via hysteresis)
+  const framesCacheRef = useRef<Map<number, FrameAsset>>(new Map());
+  const isFrameLoadedRef = useRef<Uint8Array>(new Uint8Array(TOTAL_FRAMES + 1));
   const activeControllersRef = useRef<Map<number, AbortController>>(new Map());
   const inFlightCountRef = useRef(0);
+  const lastScheduledIntegerRef = useRef<number>(-1);
 
   // React state for boot & overlays
   const [loadProgress, setLoadProgress] = useState(0);
@@ -85,189 +112,59 @@ export default function ScrollytellingEngine({
     return getFrameUrl(frameNum, "1080p");
   }, []);
 
-  // Fetch compressed WebP Blob with abort signal
-  const fetchBlob = useCallback(async (url: string, signal?: AbortSignal): Promise<Blob> => {
-    const res = await fetch(url, { signal, cache: "force-cache" });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return await res.blob();
-  }, []);
+  // Hysteresis Batch Cache Pruning: Prevents 120Hz texture allocation/deallocation thrashing
+  const pruneCache = useCallback((center: number) => {
+    if (framesCacheRef.current.size <= MAX_CACHE_SIZE) return;
 
-  // JIT Off-Thread Bitmap Decoder with Viewport-Aware Hardware Downsampling
-  const decodeBlobToBitmap = useCallback(
-    async (frameIdx: number): Promise<FrameAsset | null> => {
-      const blob = blobCacheRef.current.get(frameIdx);
-      if (!blob) return null;
+    const minKeep = center - 18;
+    const maxKeep = center + 45;
 
-      if (typeof window !== "undefined" && "createImageBitmap" in window) {
-        try {
-          // Hardware-accelerated viewport-aware downsampling:
-          // If display is 1440px or mobile, scale bitmap to actual canvas need
-          const width = windowWidthRef.current || window.innerWidth;
-          const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
-          const targetW = Math.min(1920, Math.max(640, Math.floor(width * dpr)));
-
-          if (targetW < 1800) {
-            const targetH = Math.round(targetW / (1920 / 1080));
-            return await createImageBitmap(blob, {
-              resizeWidth: targetW,
-              resizeHeight: targetH,
-              resizeQuality: "medium",
-            });
-          }
-          return await createImageBitmap(blob);
-        } catch {
-          // Fallback below
-        }
-      }
-
-      return new Promise((resolve) => {
-        const img = new Image();
-        img.crossOrigin = "anonymous";
-        const objectUrl = URL.createObjectURL(blob);
-        img.onload = () => {
-          URL.revokeObjectURL(objectUrl);
-          resolve(img);
-        };
-        img.onerror = () => {
-          URL.revokeObjectURL(objectUrl);
-          resolve(null);
-        };
-        img.src = objectUrl;
-      });
-    },
-    []
-  );
-
-  // Evict GPU Bitmaps strictly outside the near-field window
-  const pruneBitmapCache = useCallback((center: number) => {
-    const minKeep = center - (NEAR_BITMAP_BACKWARD + BITMAP_EVICT_MARGIN);
-    const maxKeep = center + (NEAR_BITMAP_FORWARD + BITMAP_EVICT_MARGIN);
-
-    for (const [idx, asset] of bitmapCacheRef.current.entries()) {
+    for (const [idx, asset] of framesCacheRef.current.entries()) {
       if (idx < minKeep || idx > maxKeep) {
         if ("close" in asset && typeof asset.close === "function") {
-          asset.close(); // Immediately release ~8.3 MB of GPU texture VRAM
+          asset.close(); // Immediately reclaim GPU VRAM
         }
-        bitmapCacheRef.current.delete(idx);
+        framesCacheRef.current.delete(idx);
+        isFrameLoadedRef.current[idx] = 0;
       }
     }
   }, []);
 
-  // Evict Tier 1 Blobs if compressed cache exceeds limit
-  const pruneBlobCache = useCallback((center: number) => {
-    if (blobCacheRef.current.size > MAX_BLOB_CACHE_SIZE) {
-      let furthestIdx = -1;
-      let maxDist = -1;
-
-      for (const idx of blobCacheRef.current.keys()) {
-        const dist = Math.abs(idx - center);
-        if (dist > maxDist) {
-          maxDist = dist;
-          furthestIdx = idx;
-        }
-      }
-
-      if (furthestIdx !== -1 && maxDist > 80) {
-        blobCacheRef.current.delete(furthestIdx);
-        isBlobLoadedRef.current[furthestIdx] = 0;
-      }
-    }
-  }, []);
-
-  // JIT Near-Field Bitmap Decodes from Tier 1 Blobs (< 1ms off-thread)
-  const ensureNearFieldBitmaps = useCallback(
-    (center: number, isForward: boolean) => {
-      const start = isForward ? center - NEAR_BITMAP_BACKWARD : center - NEAR_BITMAP_FORWARD;
-      const end = isForward ? center + NEAR_BITMAP_FORWARD : center + NEAR_BITMAP_BACKWARD;
-
-      const minF = Math.max(1, start);
-      const maxF = Math.min(TOTAL_FRAMES, end);
-
-      const order: number[] = [center];
-      const maxOffset = Math.max(center - minF, maxF - center);
-      for (let offset = 1; offset <= maxOffset; offset++) {
-        if (isForward) {
-          if (center + offset <= maxF) order.push(center + offset);
-          if (center - offset >= minF) order.push(center - offset);
-        } else {
-          if (center - offset >= minF) order.push(center - offset);
-          if (center + offset <= maxF) order.push(center + offset);
-        }
-      }
-
-      for (const f of order) {
-        if (
-          blobCacheRef.current.has(f) &&
-          !bitmapCacheRef.current.has(f) &&
-          !inFlightDecodesRef.current.has(f)
-        ) {
-          inFlightDecodesRef.current.add(f);
-          decodeBlobToBitmap(f).then((asset) => {
-            inFlightDecodesRef.current.delete(f);
-            if (asset) {
-              bitmapCacheRef.current.set(f, asset);
-              const cur = Math.floor(currentFrameRef.current);
-              if (cur === f || Math.abs(cur - f) <= 1) {
-                lastDrawnFrameRef.current = -1;
-              }
-            }
-          });
-        }
-      }
-    },
-    [decodeBlobToBitmap]
-  );
-
-  // Find nearest preceding contiguous loaded bitmap (prevents ghosting / teleporting snaps)
+  // Find nearest preceding contiguous loaded frame without any Promise delays
   const findNearestLoadedFrame = useCallback((target: number): number => {
-    const cache = bitmapCacheRef.current;
-    if (cache.has(target)) return target;
+    const isLoaded = isFrameLoadedRef.current;
+    if (isLoaded[target]) return target;
 
     // Search backward first (hold closest past frame along travel trajectory)
-    const minBack = Math.max(1, target - 25);
+    const minBack = Math.max(1, target - 30);
     for (let f = target - 1; f >= minBack; f--) {
-      if (cache.has(f)) return f;
+      if (isLoaded[f]) return f;
     }
 
     // Search forward if backward has none
     const maxForward = Math.min(TOTAL_FRAMES, target + 15);
     for (let f = target + 1; f <= maxForward; f++) {
-      if (cache.has(f)) return f;
+      if (isLoaded[f]) return f;
     }
 
-    // Fallback to last successfully drawn frame, or any loaded bitmap
-    if (lastDrawnFrameRef.current !== -1 && cache.has(lastDrawnFrameRef.current)) {
+    // Fallback to last successfully drawn frame, or frame 1
+    if (lastDrawnFrameRef.current !== -1 && isLoaded[lastDrawnFrameRef.current]) {
       return lastDrawnFrameRef.current;
     }
 
-    // If target has a blob, trigger urgent JIT decode
-    if (blobCacheRef.current.has(target) && !inFlightDecodesRef.current.has(target)) {
-      inFlightDecodesRef.current.add(target);
-      decodeBlobToBitmap(target).then((asset) => {
-        inFlightDecodesRef.current.delete(target);
-        if (asset) {
-          bitmapCacheRef.current.set(target, asset);
-          lastDrawnFrameRef.current = -1;
-        }
-      });
-    }
+    return isLoaded[1] ? 1 : -1;
+  }, []);
 
-    return cache.size > 0 ? (cache.keys().next().value ?? -1) : -1;
-  }, [decodeBlobToBitmap]);
-
-  // Two-Tier Directional Linear Preloader with Abortable Requests
-  const scheduleTwoTierBuffer = useCallback(
+  // Directional Linear Preloader with Ahead-Of-Time (AOT) Native Decoding
+  const scheduleLinearBuffer = useCallback(
     (centerFloat: number, velocity: number) => {
       const center = Math.round(centerFloat);
       const isForward = velocity >= -0.05;
 
-      // 1. Prune GPU Bitmaps (Tier 2) to maintain strict ~18 bitmap ceiling (~140 MB)
-      pruneBitmapCache(center);
+      // 1. Hysteresis batch eviction (only prunes when cache exceeds 58 frames)
+      pruneCache(center);
 
-      // 2. JIT decode near-field frames from existing Blobs (< 1ms off-thread)
-      ensureNearFieldBitmaps(center, isForward);
-
-      // 3. Abort out-of-range in-flight network downloads
+      // 2. Abort out-of-range in-flight network downloads
       for (const [frameIdx, controller] of activeControllersRef.current.entries()) {
         const dist = Math.abs(frameIdx - center);
         if (dist > CANCEL_DISTANCE) {
@@ -277,47 +174,47 @@ export default function ScrollytellingEngine({
         }
       }
 
-      // 4. Build prioritized desired corridor for compressed Blobs (Tier 1)
-      const desiredBlobs: number[] = [];
+      // 3. Build prioritized desired corridor along trajectory
+      const desiredFrames: number[] = [];
       const floorFrame = Math.floor(centerFloat);
-      if (!isBlobLoadedRef.current[floorFrame] && !activeControllersRef.current.has(floorFrame)) {
-        desiredBlobs.push(floorFrame);
+      if (!isFrameLoadedRef.current[floorFrame] && !activeControllersRef.current.has(floorFrame)) {
+        desiredFrames.push(floorFrame);
       }
 
       if (isForward) {
         // Forward priority corridor: center + 1, center + 2, ...
         for (let i = 1; i <= LOOKAHEAD_FORWARD; i++) {
           const f = center + i;
-          if (f <= TOTAL_FRAMES && !isBlobLoadedRef.current[f] && !activeControllersRef.current.has(f)) {
-            desiredBlobs.push(f);
+          if (f <= TOTAL_FRAMES && !isFrameLoadedRef.current[f] && !activeControllersRef.current.has(f)) {
+            desiredFrames.push(f);
           }
         }
         // Backward safety corridor: center - 1, ...
         for (let i = 1; i <= LOOKAHEAD_BACKWARD; i++) {
           const f = center - i;
-          if (f >= 1 && !isBlobLoadedRef.current[f] && !activeControllersRef.current.has(f)) {
-            desiredBlobs.push(f);
+          if (f >= 1 && !isFrameLoadedRef.current[f] && !activeControllersRef.current.has(f)) {
+            desiredFrames.push(f);
           }
         }
       } else {
         // Reverse priority corridor: center - 1, center - 2, ...
         for (let i = 1; i <= LOOKAHEAD_FORWARD; i++) {
           const f = center - i;
-          if (f >= 1 && !isBlobLoadedRef.current[f] && !activeControllersRef.current.has(f)) {
-            desiredBlobs.push(f);
+          if (f >= 1 && !isFrameLoadedRef.current[f] && !activeControllersRef.current.has(f)) {
+            desiredFrames.push(f);
           }
         }
         // Forward safety in reverse
         for (let i = 1; i <= LOOKAHEAD_BACKWARD; i++) {
           const f = center + i;
-          if (f <= TOTAL_FRAMES && !isBlobLoadedRef.current[f] && !activeControllersRef.current.has(f)) {
-            desiredBlobs.push(f);
+          if (f <= TOTAL_FRAMES && !isFrameLoadedRef.current[f] && !activeControllersRef.current.has(f)) {
+            desiredFrames.push(f);
           }
         }
       }
 
-      // 5. Dispatch network requests up to MAX_CONCURRENT_REQUESTS
-      for (const frameToFetch of desiredBlobs) {
+      // 4. Dispatch requests up to MAX_CONCURRENT_REQUESTS
+      for (const frameToFetch of desiredFrames) {
         if (inFlightCountRef.current >= MAX_CONCURRENT_REQUESTS) break;
 
         const controller = new AbortController();
@@ -326,33 +223,22 @@ export default function ScrollytellingEngine({
 
         const url = getFramePath(frameToFetch);
 
-        fetchBlob(url, controller.signal)
-          .then((blob) => {
+        loadFrameAsset(url, controller.signal)
+          .then((asset) => {
             activeControllersRef.current.delete(frameToFetch);
             inFlightCountRef.current = Math.max(0, inFlightCountRef.current - 1);
 
-            blobCacheRef.current.set(frameToFetch, blob);
-            isBlobLoadedRef.current[frameToFetch] = 1;
-            pruneBlobCache(center);
+            framesCacheRef.current.set(frameToFetch, asset);
+            isFrameLoadedRef.current[frameToFetch] = 1;
 
-            // If this frame is within the near-field window, decode it to bitmap immediately
-            const cur = Math.round(currentFrameRef.current);
-            const dist = Math.abs(frameToFetch - cur);
-            if (dist <= NEAR_BITMAP_FORWARD + 2) {
-              inFlightDecodesRef.current.add(frameToFetch);
-              decodeBlobToBitmap(frameToFetch).then((asset) => {
-                inFlightDecodesRef.current.delete(frameToFetch);
-                if (asset) {
-                  bitmapCacheRef.current.set(frameToFetch, asset);
-                  if (Math.floor(currentFrameRef.current) === frameToFetch || dist <= 1) {
-                    lastDrawnFrameRef.current = -1;
-                  }
-                }
-              });
+            // If active playhead is on or adjacent to this frame, immediately trigger repaint
+            const cur = Math.floor(currentFrameRef.current);
+            if (cur === frameToFetch || Math.abs(cur - frameToFetch) <= 1) {
+              lastDrawnFrameRef.current = -1;
             }
 
             // Immediately trigger next queue tick
-            scheduleTwoTierBuffer(currentFrameRef.current, scrollVelocityRef.current);
+            scheduleLinearBuffer(currentFrameRef.current, scrollVelocityRef.current);
           })
           .catch((err) => {
             activeControllersRef.current.delete(frameToFetch);
@@ -363,7 +249,7 @@ export default function ScrollytellingEngine({
           });
       }
     },
-    [fetchBlob, getFramePath, pruneBitmapCache, ensureNearFieldBitmaps, pruneBlobCache, decodeBlobToBitmap]
+    [getFramePath, pruneCache]
   );
 
   // Canvas drawing function optimized for 60Hz & 120Hz displays
@@ -378,13 +264,13 @@ export default function ScrollytellingEngine({
 
       // Resolve best available loaded frame (target or nearest preceding contiguous loaded frame)
       let frameToDraw = targetInt;
-      if (!bitmapCacheRef.current.has(frameToDraw)) {
+      if (!isFrameLoadedRef.current[frameToDraw]) {
         frameToDraw = findNearestLoadedFrame(targetInt);
       }
 
       if (frameToDraw === -1) return;
 
-      const asset = bitmapCacheRef.current.get(frameToDraw);
+      const asset = framesCacheRef.current.get(frameToDraw);
       if (!asset) return;
 
       // 60Hz & 120Hz Fillrate Optimization:
@@ -468,7 +354,7 @@ export default function ScrollytellingEngine({
     return () => window.removeEventListener("resize", updateDimensions);
   }, [drawFrameToCanvas]);
 
-  // Progressive Bootstrap & Two-Tier Corridor Streamer
+  // Progressive Bootstrap & Ahead-Of-Time (AOT) Corridor Streamer
   useEffect(() => {
     let isCancelled = false;
     let loaded = 0;
@@ -480,17 +366,11 @@ export default function ScrollytellingEngine({
 
       for (let i = 1; i <= preloadCount; i++) {
         const url = getFramePath(i);
-        const p = fetchBlob(url)
-          .then(async (blob) => {
+        const p = loadFrameAsset(url)
+          .then((asset) => {
             if (!isCancelled) {
-              blobCacheRef.current.set(i, blob);
-              isBlobLoadedRef.current[i] = 1;
-
-              // Immediately decode initial runway into GPU ImageBitmaps
-              const asset = await decodeBlobToBitmap(i);
-              if (asset && !isCancelled) {
-                bitmapCacheRef.current.set(i, asset);
-              }
+              framesCacheRef.current.set(i, asset);
+              isFrameLoadedRef.current[i] = 1;
             }
           })
           .catch(() => {})
@@ -519,8 +399,8 @@ export default function ScrollytellingEngine({
       // Render initial frame immediately
       drawFrameToCanvas(1);
 
-      // Start two-tier buffer streaming
-      scheduleTwoTierBuffer(1, 1.0);
+      // Start AOT linear buffer streaming
+      scheduleLinearBuffer(1, 1.0);
     };
 
     bootEngine();
@@ -532,16 +412,15 @@ export default function ScrollytellingEngine({
         controller.abort();
       }
       activeControllersRef.current.clear();
-      // Free all GPU ImageBitmaps
-      for (const asset of bitmapCacheRef.current.values()) {
+      // Free GPU ImageBitmaps
+      for (const asset of framesCacheRef.current.values()) {
         if ("close" in asset && typeof asset.close === "function") {
           asset.close();
         }
       }
-      bitmapCacheRef.current.clear();
-      blobCacheRef.current.clear();
+      framesCacheRef.current.clear();
     };
-  }, [getFramePath, fetchBlob, decodeBlobToBitmap, drawFrameToCanvas, scheduleTwoTierBuffer]);
+  }, [getFramePath, drawFrameToCanvas, scheduleLinearBuffer]);
 
   // Main Scroll Engine & Synchronized 60FPS/120FPS RAF Loop
   useEffect(() => {
@@ -574,13 +453,13 @@ export default function ScrollytellingEngine({
 
       const targetFrameFloat = 1 + progress * (TOTAL_FRAMES - 1);
 
-      // High-performance single-stage time-invariant exponential filter (tau = 48)
-      // Eliminates compound input lag while guaranteeing continuous sub-pixel smooth motion
+      // High-performance direct exponential filter (tau = 72)
+      // Eliminates compound input lag so trackpad and wheel movements feel instantaneous
       const now = performance.now();
       const dt = Math.min(0.05, Math.max(0.001, (now - lastTimeRef.current) / 1000));
       lastTimeRef.current = now;
 
-      const smoothFactor = 1 - Math.exp(-40 * dt);
+      const smoothFactor = 1 - Math.exp(-72 * dt);
       const prevFloat = smoothFrameRef.current;
       smoothFrameRef.current += (targetFrameFloat - smoothFrameRef.current) * smoothFactor;
       const renderFloat = smoothFrameRef.current;
@@ -590,8 +469,12 @@ export default function ScrollytellingEngine({
       const velocity = (renderFloat - prevFloat) / dt;
       scrollVelocityRef.current = velocity;
 
-      // Directional linear buffer streaming around active playhead
-      scheduleTwoTierBuffer(renderFloat, velocity);
+      // Throttle linear preloader: only run when integer frame advances or velocity changes sign
+      const currentInt = Math.floor(renderFloat);
+      if (currentInt !== lastScheduledIntegerRef.current || Math.abs(velocity) > 5) {
+        lastScheduledIntegerRef.current = currentInt;
+        scheduleLinearBuffer(renderFloat, velocity);
+      }
 
       // Direct DOM Hero Video Crossfade (Zero React Virtual DOM overhead in RAF)
       const vOpacity = Math.max(0, 1 - (renderFloat - 1) / 14);
@@ -689,7 +572,7 @@ export default function ScrollytellingEngine({
       lenis.destroy();
       lenisRef.current = null;
     };
-  }, [isReady, drawFrameToCanvas, onFrameUpdate, scheduleTwoTierBuffer]);
+  }, [isReady, drawFrameToCanvas, onFrameUpdate, scheduleLinearBuffer]);
 
   // Pause / Resume Lenis scrolling when modal opens or closes
   useEffect(() => {
@@ -709,7 +592,7 @@ export default function ScrollytellingEngine({
       const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
       const targetScrollY = targetProgress * maxScroll;
 
-      scheduleTwoTierBuffer(target, 1.0);
+      scheduleLinearBuffer(target, 1.0);
 
       lenisRef.current.scrollTo(targetScrollY, {
         duration: 1.2,
@@ -721,7 +604,7 @@ export default function ScrollytellingEngine({
         },
       });
     }
-  }, [targetNavigationFrame, scheduleTwoTierBuffer, onNavigationComplete]);
+  }, [targetNavigationFrame, scheduleLinearBuffer, onNavigationComplete]);
 
   // Autoplay video loop for Safari compatibility
   useEffect(() => {
@@ -734,7 +617,7 @@ export default function ScrollytellingEngine({
     if (lenisRef.current) {
       const targetProgress = (630 - 1) / (TOTAL_FRAMES - 1);
       const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
-      scheduleTwoTierBuffer(630, 1.0);
+      scheduleLinearBuffer(630, 1.0);
       lenisRef.current.scrollTo(targetProgress * maxScroll, { duration: 1.2 });
     }
   };
