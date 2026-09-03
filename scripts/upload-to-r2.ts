@@ -172,7 +172,7 @@ async function main() {
       "still_shot.mp4",
       "events/hult.png",
       "ecell_shots/00001.webp",
-      "ecell_shots/01262.webp",
+      "ecell_shots/00840.webp",
     ];
 
     for (const key of sampleKeys) {

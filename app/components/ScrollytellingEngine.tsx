@@ -6,7 +6,7 @@ import PreloadManager from "./PreloadManager";
 import HeroOverlay from "./overlays/HeroOverlay";
 import DoorAboutOverlay from "./overlays/DoorAboutOverlay";
 import WallGalleryOverlay from "./overlays/WallGalleryOverlay";
-import { getAssetUrl, getFrameUrl } from "../lib/assets";
+import { getAssetUrl, getFrameUrl, getPhysicalFrameNumber, TOTAL_PHYSICAL_FRAMES } from "../lib/assets";
 
 interface ScrollytellingEngineProps {
   onFrameUpdate?: (frame: number) => void;
@@ -16,7 +16,7 @@ interface ScrollytellingEngineProps {
   isJoinModalOpen?: boolean;
 }
 
-const TOTAL_FRAMES = 1262;
+const TOTAL_FRAMES = 1262; // Virtual timeline length (scroll track, events, team & contact overlays)
 const CRITICAL_PRELOAD_COUNT = 24; // Contiguous initial runway for instant butter-smooth boot
 const SCROLL_TRACK_HEIGHT = TOTAL_FRAMES * 12; // 15,144px scroll track for 1:1 frame pacing
 const MAX_CONCURRENT_REQUESTS = 6; // Optimal concurrent HTTP/2 streams per domain
@@ -42,10 +42,10 @@ export default function ScrollytellingEngine({
   const lenisRef = useRef<Lenis | null>(null);
 
   // =========================================================================
-  // ZERO-LAG TWO-TIER ARCHITECTURE
+  // ZERO-LAG TWO-TIER ARCHITECTURE WITH 625-840 WALL LOOP
   // =========================================================================
-  // Tier 1: Permanent Compressed Blobs (~50 KB each; ~60 MB total for ALL 1,262 frames)
-  // Once downloaded, Blobs are NEVER discarded so re-scrubbing is 100% instant (< 1ms).
+  // Tier 1: Permanent Compressed Blobs (~50 KB each; only 840 unique physical frames = ~41 MB total)
+  // Virtual frames 841–1262 map to physical frames 625–840, requiring ZERO network downloads!
   const blobCacheRef = useRef<Map<number, Blob>>(new Map());
 
   // Tier 2: Active GPU Bitmaps (strictly ~35 frames = ~290 MB GPU VRAM ceiling)
@@ -77,15 +77,15 @@ export default function ScrollytellingEngine({
   const lastDrawnWidthRef = useRef<number>(0);
   const lastDrawnHeightRef = useRef<number>(0);
 
-  // Helper to format frame CDN URL strictly to 1080p ecell_shots
+  // Helper to format frame CDN URL strictly to 1080p ecell_shots (resolves virtual to physical)
   const getFramePath = useCallback((frameNum: number) => {
     return getFrameUrl(frameNum, "1080p");
   }, []);
 
   // Native Off-Thread Bitmap Decoder (Fast native GPU decode, no slow software resampler)
   const decodeBlobToBitmap = useCallback(
-    async (frameIdx: number): Promise<FrameAsset | null> => {
-      const blob = blobCacheRef.current.get(frameIdx);
+    async (physicalFrameIdx: number): Promise<FrameAsset | null> => {
+      const blob = blobCacheRef.current.get(physicalFrameIdx);
       if (!blob) return null;
 
       if (typeof window !== "undefined" && "createImageBitmap" in window) {
@@ -114,20 +114,20 @@ export default function ScrollytellingEngine({
     []
   );
 
-  // Find nearest preceding contiguous loaded frame without any Promise delays
-  const findNearestLoadedFrame = useCallback((target: number): number => {
+  // Find nearest preceding contiguous loaded physical frame without any Promise delays
+  const findNearestLoadedFrame = useCallback((targetPhysical: number): number => {
     const cache = bitmapCacheRef.current;
-    if (cache.has(target)) return target;
+    if (cache.has(targetPhysical)) return targetPhysical;
 
     // Search backward first (hold closest past frame along travel trajectory)
-    const minBack = Math.max(1, target - 35);
-    for (let f = target - 1; f >= minBack; f--) {
+    const minBack = Math.max(1, targetPhysical - 35);
+    for (let f = targetPhysical - 1; f >= minBack; f--) {
       if (cache.has(f)) return f;
     }
 
     // Search forward if backward has none
-    const maxForward = Math.min(TOTAL_FRAMES, target + 15);
-    for (let f = target + 1; f <= maxForward; f++) {
+    const maxForward = Math.min(TOTAL_PHYSICAL_FRAMES, targetPhysical + 15);
+    for (let f = targetPhysical + 1; f <= maxForward; f++) {
       if (cache.has(f)) return f;
     }
 
@@ -139,15 +139,16 @@ export default function ScrollytellingEngine({
     return cache.size > 0 ? (cache.keys().next().value ?? 1) : 1;
   }, []);
 
-  // Playhead-First Priority Preloader with Head-of-Line Blocking Elimination
+  // Playhead-First Priority Preloader with 625-840 Wall Loop Support
   const schedulePriorityBuffer = useCallback(
     (centerFloat: number, velocity: number) => {
-      const target = Math.min(TOTAL_FRAMES, Math.max(1, Math.round(centerFloat)));
+      const centerVirtual = Math.min(TOTAL_FRAMES, Math.max(1, Math.round(centerFloat)));
+      const targetPhysical = getPhysicalFrameNumber(centerVirtual);
       const isForward = velocity >= -0.05;
 
-      // 1. Prune GPU Bitmaps outside [target - 6, target + 32] to cap GPU memory at ~290 MB
-      const minKeep = Math.max(1, target - 6);
-      const maxKeep = Math.min(TOTAL_FRAMES, target + 32);
+      // 1. Prune GPU Bitmaps outside [targetPhysical - 8, targetPhysical + 32]
+      const minKeep = Math.max(1, targetPhysical - 8);
+      const maxKeep = Math.min(TOTAL_PHYSICAL_FRAMES, targetPhysical + 32);
 
       for (const [idx, asset] of bitmapCacheRef.current.entries()) {
         if (idx < minKeep || idx > maxKeep) {
@@ -159,9 +160,9 @@ export default function ScrollytellingEngine({
       }
 
       // 2. High-Priority JIT Decode for frames already in blobCache but not in bitmapCache
-      // Focus on immediate playhead window first: [target - 3, target + 10]
-      const nearStart = Math.max(1, target - 3);
-      const nearEnd = Math.min(TOTAL_FRAMES, target + 10);
+      // Focus on immediate physical playhead window: [targetPhysical - 3, targetPhysical + 10]
+      const nearStart = Math.max(1, targetPhysical - 3);
+      const nearEnd = Math.min(TOTAL_PHYSICAL_FRAMES, targetPhysical + 10);
       for (let f = nearStart; f <= nearEnd; f++) {
         if (
           blobCacheRef.current.has(f) &&
@@ -173,8 +174,8 @@ export default function ScrollytellingEngine({
             inFlightDecodesRef.current.delete(f);
             if (asset) {
               bitmapCacheRef.current.set(f, asset);
-              const cur = Math.floor(currentFrameRef.current);
-              if (Math.abs(cur - f) <= 1) {
+              const curPhysical = getPhysicalFrameNumber(currentFrameRef.current);
+              if (Math.abs(curPhysical - f) <= 1) {
                 lastDrawnFrameRef.current = -1;
               }
             }
@@ -182,55 +183,53 @@ export default function ScrollytellingEngine({
         }
       }
 
-      // 3. Playhead-First Priority Request Scheduling
-      // Priority 1: Target frame and immediate next 3 frames [target, target + 1, target + 2, target + 3]
-      // Priority 2: Directional corridor along trajectory
-      const priorityQueue: number[] = [];
+      // 3. Build prioritized physical queue
+      const priorityPhysical: number[] = [];
+      const seen = new Set<number>();
 
-      // Urgent: playhead and immediate adjacent frames
+      // Urgent: playhead and immediate adjacent virtual frames
       for (let i = 0; i <= PLAYHEAD_WINDOW; i++) {
-        const f = isForward ? target + i : target - i;
-        if (f >= 1 && f <= TOTAL_FRAMES && !blobCacheRef.current.has(f) && !activeControllersRef.current.has(f)) {
-          priorityQueue.push(f);
+        const v = isForward ? centerVirtual + i : centerVirtual - i;
+        if (v >= 1 && v <= TOTAL_FRAMES) {
+          const p = getPhysicalFrameNumber(v);
+          if (!seen.has(p) && !blobCacheRef.current.has(p) && !activeControllersRef.current.has(p)) {
+            priorityPhysical.push(p);
+            seen.add(p);
+          }
         }
       }
 
-      // Lookahead corridor
-      if (isForward) {
-        for (let i = PLAYHEAD_WINDOW + 1; i <= LOOKAHEAD_FORWARD; i++) {
-          const f = target + i;
-          if (f <= TOTAL_FRAMES && !blobCacheRef.current.has(f) && !activeControllersRef.current.has(f)) {
-            priorityQueue.push(f);
+      // Lookahead corridor along trajectory
+      const lookahead = isForward ? LOOKAHEAD_FORWARD : LOOKAHEAD_BACKWARD;
+      for (let i = PLAYHEAD_WINDOW + 1; i <= lookahead; i++) {
+        const v = isForward ? centerVirtual + i : centerVirtual - i;
+        if (v >= 1 && v <= TOTAL_FRAMES) {
+          const p = getPhysicalFrameNumber(v);
+          if (!seen.has(p) && !blobCacheRef.current.has(p) && !activeControllersRef.current.has(p)) {
+            priorityPhysical.push(p);
+            seen.add(p);
           }
         }
-        for (let i = 1; i <= LOOKAHEAD_BACKWARD; i++) {
-          const f = target - i;
-          if (f >= 1 && !blobCacheRef.current.has(f) && !activeControllersRef.current.has(f)) {
-            priorityQueue.push(f);
-          }
-        }
-      } else {
-        for (let i = PLAYHEAD_WINDOW + 1; i <= LOOKAHEAD_FORWARD; i++) {
-          const f = target - i;
-          if (f >= 1 && !blobCacheRef.current.has(f) && !activeControllersRef.current.has(f)) {
-            priorityQueue.push(f);
-          }
-        }
-        for (let i = 1; i <= LOOKAHEAD_BACKWARD; i++) {
-          const f = target + i;
-          if (f <= TOTAL_FRAMES && !blobCacheRef.current.has(f) && !activeControllersRef.current.has(f)) {
-            priorityQueue.push(f);
+      }
+
+      // Safety corridor behind trajectory
+      const backwardLook = isForward ? LOOKAHEAD_BACKWARD : LOOKAHEAD_FORWARD;
+      for (let i = 1; i <= backwardLook; i++) {
+        const v = isForward ? centerVirtual - i : centerVirtual + i;
+        if (v >= 1 && v <= TOTAL_FRAMES) {
+          const p = getPhysicalFrameNumber(v);
+          if (!seen.has(p) && !blobCacheRef.current.has(p) && !activeControllersRef.current.has(p)) {
+            priorityPhysical.push(p);
+            seen.add(p);
           }
         }
       }
 
       // 4. Preempt distant in-flight requests if playhead is starving!
-      // If the target frame is not in blobCache and not in activeControllers, but all slots are full:
-      // Abort any in-flight request that is further than 10 frames away from target!
-      const targetNeedsFetch = !blobCacheRef.current.has(target) && !activeControllersRef.current.has(target);
+      const targetNeedsFetch = !blobCacheRef.current.has(targetPhysical) && !activeControllersRef.current.has(targetPhysical);
       if (targetNeedsFetch && inFlightCountRef.current >= MAX_CONCURRENT_REQUESTS) {
         for (const [frameIdx, controller] of activeControllersRef.current.entries()) {
-          if (Math.abs(frameIdx - target) > 10) {
+          if (Math.abs(frameIdx - targetPhysical) > 10) {
             controller.abort();
             activeControllersRef.current.delete(frameIdx);
             inFlightCountRef.current = Math.max(0, inFlightCountRef.current - 1);
@@ -241,15 +240,15 @@ export default function ScrollytellingEngine({
 
       // Also abort any active controller that has drifted far (> 40 frames away)
       for (const [frameIdx, controller] of activeControllersRef.current.entries()) {
-        if (Math.abs(frameIdx - target) > 40) {
+        if (Math.abs(frameIdx - targetPhysical) > 40) {
           controller.abort();
           activeControllersRef.current.delete(frameIdx);
           inFlightCountRef.current = Math.max(0, inFlightCountRef.current - 1);
         }
       }
 
-      // 5. Dispatch network requests from priorityQueue up to MAX_CONCURRENT_REQUESTS
-      for (const frameToFetch of priorityQueue) {
+      // 5. Dispatch network requests from priorityPhysical up to MAX_CONCURRENT_REQUESTS
+      for (const frameToFetch of priorityPhysical) {
         if (inFlightCountRef.current >= MAX_CONCURRENT_REQUESTS) break;
 
         const controller = new AbortController();
@@ -270,16 +269,16 @@ export default function ScrollytellingEngine({
             // Store compressed Blob permanently in memory (~50 KB)
             blobCacheRef.current.set(frameToFetch, blob);
 
-            // If this frame is within the near-field window, decode it to bitmap immediately
-            const cur = Math.round(currentFrameRef.current);
-            const dist = Math.abs(frameToFetch - cur);
+            // If this physical frame is within the near-field window, decode it to bitmap immediately
+            const curPhysical = getPhysicalFrameNumber(currentFrameRef.current);
+            const dist = Math.abs(frameToFetch - curPhysical);
             if (dist <= 15) {
               inFlightDecodesRef.current.add(frameToFetch);
               decodeBlobToBitmap(frameToFetch).then((asset) => {
                 inFlightDecodesRef.current.delete(frameToFetch);
                 if (asset) {
                   bitmapCacheRef.current.set(frameToFetch, asset);
-                  if (Math.floor(currentFrameRef.current) === frameToFetch || dist <= 1) {
+                  if (curPhysical === frameToFetch || dist <= 1) {
                     lastDrawnFrameRef.current = -1;
                   }
                 }
@@ -310,22 +309,23 @@ export default function ScrollytellingEngine({
 
       const clamped = Math.min(TOTAL_FRAMES, Math.max(1, frameFloat));
       const targetInt = Math.floor(clamped);
+      const targetPhysical = getPhysicalFrameNumber(targetInt);
 
       // Resolve best available loaded frame (target or nearest preceding contiguous loaded frame)
-      let frameToDraw = targetInt;
+      let frameToDraw = targetPhysical;
       if (!bitmapCacheRef.current.has(frameToDraw)) {
         // If blob is available, trigger instant JIT decode
-        if (blobCacheRef.current.has(targetInt) && !inFlightDecodesRef.current.has(targetInt)) {
-          inFlightDecodesRef.current.add(targetInt);
-          decodeBlobToBitmap(targetInt).then((asset) => {
-            inFlightDecodesRef.current.delete(targetInt);
+        if (blobCacheRef.current.has(targetPhysical) && !inFlightDecodesRef.current.has(targetPhysical)) {
+          inFlightDecodesRef.current.add(targetPhysical);
+          decodeBlobToBitmap(targetPhysical).then((asset) => {
+            inFlightDecodesRef.current.delete(targetPhysical);
             if (asset) {
-              bitmapCacheRef.current.set(targetInt, asset);
+              bitmapCacheRef.current.set(targetPhysical, asset);
               lastDrawnFrameRef.current = -1;
             }
           });
         }
-        frameToDraw = findNearestLoadedFrame(targetInt);
+        frameToDraw = findNearestLoadedFrame(targetPhysical);
       }
 
       if (frameToDraw === -1) return;

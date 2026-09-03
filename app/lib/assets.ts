@@ -27,10 +27,35 @@ export function getAssetUrl(path: string): string {
   return R2_PUBLIC_BASE_URL ? `${R2_PUBLIC_BASE_URL}${cleanPath}` : cleanPath;
 }
 
+// Wall sequence loop configuration:
+// Unique physical assets exist from 1 to 840.
+// Virtual frames 841 to 1262 seamlessly loop through wall frames 625 to 840 (216-frame cycle).
+export const TOTAL_VIRTUAL_FRAMES = 1262;
+export const TOTAL_PHYSICAL_FRAMES = 840;
+export const WALL_LOOP_START = 625;
+export const WALL_LOOP_END = 840;
+export const WALL_LOOP_LENGTH = WALL_LOOP_END - WALL_LOOP_START + 1; // 216 frames
+
+/**
+ * Maps any virtual timeline frame (1 to 1262) to its unique physical asset frame (1 to 840).
+ *
+ * @param virtualFrame - Virtual scroll frame (1 to 1262)
+ * @returns Physical asset frame number (1 to 840)
+ */
+export function getPhysicalFrameNumber(virtualFrame: number): number {
+  const f = Math.round(virtualFrame);
+  if (f <= TOTAL_PHYSICAL_FRAMES) {
+    return Math.max(1, f);
+  }
+  const offset = f - (TOTAL_PHYSICAL_FRAMES + 1);
+  return WALL_LOOP_START + (offset % WALL_LOOP_LENGTH);
+}
+
 /**
  * Returns the full CDN URL for a specific scrollytelling frame number.
+ * Virtual frames > 840 automatically resolve to their physical loop frame (625–840).
  *
- * @param frameNum - 1-indexed frame integer (1 to 1262)
+ * @param frameNum - 1-indexed virtual frame integer (1 to 1262)
  * @param variant - Resolution variant ("1080p" -> "ecell_shots", "720p" -> "ecell_shots_720p")
  * @returns Fully qualified frame URL (e.g. "https://pub-...r2.dev/ecell_shots/00001.webp")
  */
@@ -38,8 +63,8 @@ export function getFrameUrl(
   frameNum: number,
   variant: "1080p" | "720p" = "1080p"
 ): string {
-  const clamped = Math.min(1262, Math.max(1, frameNum));
-  const padded = String(clamped).padStart(5, "0");
+  const physicalFrame = getPhysicalFrameNumber(frameNum);
+  const padded = String(physicalFrame).padStart(5, "0");
   const folder = variant === "720p" ? "ecell_shots_720p" : "ecell_shots";
   return getAssetUrl(`/${folder}/${padded}.webp`);
 }
