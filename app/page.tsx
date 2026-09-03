@@ -14,13 +14,21 @@ export default function Home() {
     setCurrentFrame(frame);
   }, []);
 
-  const handleNavigateToFrame = (targetFrame: number) => {
+  const handleNavigateToFrame = useCallback((targetFrame: number) => {
     setTargetNavigationFrame(targetFrame);
-  };
+  }, []);
 
-  const handleNavigationComplete = () => {
+  const handleNavigationComplete = useCallback(() => {
     setTargetNavigationFrame(null);
-  };
+  }, []);
+
+  const handleOpenJoinModal = useCallback(() => {
+    setIsJoinModalOpen(true);
+  }, []);
+
+  const handleCloseJoinModal = useCallback(() => {
+    setIsJoinModalOpen(false);
+  }, []);
 
   return (
     <main className="relative bg-[#040608] text-slate-100 selection:bg-emerald-500/30 selection:text-emerald-200 min-h-screen">
@@ -28,13 +36,13 @@ export default function Home() {
       <Header
         currentFrame={currentFrame}
         onNavigateToFrame={handleNavigateToFrame}
-        onOpenJoinModal={() => setIsJoinModalOpen(true)}
+        onOpenJoinModal={handleOpenJoinModal}
       />
 
       {/* Main Scrollytelling Engine with Lenis Smooth Scroll */}
       <ScrollytellingEngine
         onFrameUpdate={handleFrameUpdate}
-        onOpenJoinModal={() => setIsJoinModalOpen(true)}
+        onOpenJoinModal={handleOpenJoinModal}
         targetNavigationFrame={targetNavigationFrame}
         onNavigationComplete={handleNavigationComplete}
         isJoinModalOpen={isJoinModalOpen}
@@ -43,7 +51,7 @@ export default function Home() {
       {/* Application / Ideas Modal */}
       <JoinApplyModal
         isOpen={isJoinModalOpen}
-        onClose={() => setIsJoinModalOpen(false)}
+        onClose={handleCloseJoinModal}
       />
     </main>
   );
