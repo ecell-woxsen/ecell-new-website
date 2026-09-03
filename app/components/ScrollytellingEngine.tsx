@@ -542,7 +542,7 @@ export default function ScrollytellingEngine({
       }
 
       // Direct DOM Hero Video Crossfade (Zero React Virtual DOM overhead in RAF)
-      const vOpacity = Math.max(0, 1 - (renderFloat - 1) / 14);
+      const vOpacity = Math.min(1, Math.max(0, 1 - (renderFloat - 1) / 14));
       if (videoWrapperRef.current) {
         videoWrapperRef.current.style.opacity = vOpacity.toFixed(3);
         videoWrapperRef.current.style.display = vOpacity <= 0.005 ? "none" : "block";
@@ -551,9 +551,9 @@ export default function ScrollytellingEngine({
       // Hardware CSS Custom Properties Synchronization (Direct Compositor Updates)
       const container = containerRef.current;
       if (container) {
-        // Hero Overlay Transforms
-        const heroOpacity = Math.max(0, 1 - (renderFloat - 1) / 32);
-        const heroTY = (renderFloat - 1) * 2;
+        // Hero Overlay Transforms (clamped against trackpad bounce/overscroll)
+        const heroOpacity = Math.min(1, Math.max(0, 1 - (renderFloat - 1) / 32));
+        const heroTY = Math.max(0, (renderFloat - 1) * 2);
         container.style.setProperty("--hero-opacity", heroOpacity.toFixed(3));
         container.style.setProperty("--hero-ty", `-${heroTY.toFixed(2)}px`);
         container.style.setProperty("--hero-vis", heroOpacity <= 0.01 ? "hidden" : "visible");
@@ -605,8 +605,13 @@ export default function ScrollytellingEngine({
       // Eliminates 100% of React Virtual DOM reconciliations during active scrolling!
       const roundedFrame = Math.round(renderFloat);
       const isBoundaryCrossed =
-        (lastReportedFrameRef.current < 365 && roundedFrame >= 365) ||
-        (lastReportedFrameRef.current >= 365 && roundedFrame < 365) ||
+        (lastReportedFrameRef.current !== 1 && roundedFrame <= 1) ||
+        (lastReportedFrameRef.current < 50 && roundedFrame >= 50) ||
+        (lastReportedFrameRef.current >= 50 && roundedFrame < 50) ||
+        (lastReportedFrameRef.current < 350 && roundedFrame >= 350) ||
+        (lastReportedFrameRef.current >= 350 && roundedFrame < 350) ||
+        (lastReportedFrameRef.current < 425 && roundedFrame >= 425) ||
+        (lastReportedFrameRef.current >= 425 && roundedFrame < 425) ||
         (lastReportedFrameRef.current < 598 && roundedFrame >= 598) ||
         (lastReportedFrameRef.current >= 598 && roundedFrame < 598) ||
         (lastReportedFrameRef.current < 840 && roundedFrame >= 840) ||
@@ -615,10 +620,11 @@ export default function ScrollytellingEngine({
         (lastReportedFrameRef.current >= 1140 && roundedFrame < 1140);
 
       if (isBoundaryCrossed) {
-        lastReportedFrameRef.current = roundedFrame;
-        setCurrentFrame(roundedFrame);
+        const reportedFrame = roundedFrame <= 1 ? 1 : roundedFrame;
+        lastReportedFrameRef.current = reportedFrame;
+        setCurrentFrame(reportedFrame);
         if (onFrameUpdate) {
-          onFrameUpdate(roundedFrame);
+          onFrameUpdate(reportedFrame);
         }
       }
 
@@ -658,13 +664,18 @@ export default function ScrollytellingEngine({
         duration: 1.2,
         easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
         onComplete: () => {
+          lastReportedFrameRef.current = target;
+          setCurrentFrame(target);
+          if (onFrameUpdate) {
+            onFrameUpdate(target);
+          }
           if (onNavigationComplete) {
             onNavigationComplete();
           }
         },
       });
     }
-  }, [targetNavigationFrame, schedulePriorityBuffer, onNavigationComplete]);
+  }, [targetNavigationFrame, schedulePriorityBuffer, onNavigationComplete, onFrameUpdate]);
 
   // Autoplay video loop for Safari compatibility
   useEffect(() => {
@@ -673,14 +684,14 @@ export default function ScrollytellingEngine({
     }
   }, []);
 
-  const handleExploreEvents = () => {
+  const handleExploreEvents = useCallback(() => {
     if (lenisRef.current) {
       const targetProgress = (630 - 1) / (TOTAL_FRAMES - 1);
       const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
       schedulePriorityBuffer(630, 1.0);
       lenisRef.current.scrollTo(targetProgress * maxScroll, { duration: 1.2 });
     }
-  };
+  }, [schedulePriorityBuffer]);
 
   return (
     <>

@@ -3,17 +3,15 @@
 import React from "react";
 
 interface HeroOverlayProps {
-  currentFrame: number;
+  currentFrame?: number;
   onExploreClick: () => void;
   onOpenJoinModal?: () => void;
 }
 
 function HeroOverlay({
-  currentFrame,
   onExploreClick,
   onOpenJoinModal,
 }: HeroOverlayProps) {
-  if (currentFrame > 45) return null;
 
   const part1 = "WHERE ";
   const part2 = "BUILDERS";
@@ -112,7 +110,4 @@ function HeroOverlay({
   );
 }
 
-export default React.memo(HeroOverlay, (prevProps, nextProps) => {
-  if (prevProps.currentFrame > 35 && nextProps.currentFrame > 35) return true;
-  return prevProps.currentFrame === nextProps.currentFrame;
-});
+export default React.memo(HeroOverlay);
