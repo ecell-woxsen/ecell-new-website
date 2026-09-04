@@ -227,6 +227,7 @@ function ScrollytellingEngine({
   // Rendering & window dimension refs
   const currentFrameRef = useRef(1);
   const lastTimeRef = useRef(0); // set on the first RAF tick (pure init)
+  const lastScheduleTimeRef = useRef(0);
   const lastReportedFrameRef = useRef<number>(1);
   const maxGalleryWidthRef = useRef(3200);
   const windowWidthRef = useRef(typeof window !== "undefined" ? window.innerWidth : 1920);
@@ -430,7 +431,10 @@ function ScrollytellingEngine({
   const pumpDecodeQueueRef = useRef<() => void>(() => {});
 
   const pumpDecodeQueue = useCallback(() => {
-    while (decodeInflightRef.current.size < MAX_CONCURRENT_DECODES && decodeQueueRef.current.length > 0) {
+    const isMobile = assetVariantRef.current === "mobile_720p";
+    const maxDecodes = isMobile ? 6 : MAX_CONCURRENT_DECODES;
+    const keepLimit = (isMobile ? 36 : KEEP_FORWARD) + 16;
+    while (decodeInflightRef.current.size < maxDecodes && decodeQueueRef.current.length > 0) {
       const key = decodeQueueRef.current.shift()!;
       decodeQueuedRef.current.delete(key);
 
@@ -444,7 +448,7 @@ function ScrollytellingEngine({
         continue;
       }
       const curPhys = getPhysicalFrameNumber(currentFrameRef.current);
-      if (Math.abs(phys - curPhys) > KEEP_FORWARD + 16) {
+      if (Math.abs(phys - curPhys) > keepLimit) {
         stats.decodeDrops++;
         continue;
       }
@@ -719,7 +723,12 @@ function ScrollytellingEngine({
       const dir = isForward ? 1 : -1;
       const variant = assetVariantRef.current;
 
-      // 1) Prune decoded bitmaps outside [target-KEEP_BACK, target+KEEP_FORWARD]
+      const isMobile = variant === "mobile_720p";
+      const keepForward = isMobile ? 36 : KEEP_FORWARD;
+      const decodeForward = isMobile ? 24 : DECODE_FORWARD;
+      const lookaheadForward = isMobile ? 40 : LOOKAHEAD_FORWARD;
+
+      // 1) Prune decoded bitmaps outside [target-KEEP_BACK, target+keepForward]
       for (const [key, asset] of bitmapCacheRef.current) {
         if (!key.startsWith(`${variant}:`)) {
           closeAsset(asset); // stale variant (defensive — flip handler clears these)
@@ -727,15 +736,15 @@ function ScrollytellingEngine({
           continue;
         }
         const p = physOfKey(key);
-        if (p < targetPhysical - KEEP_BACK || p > targetPhysical + KEEP_FORWARD) {
+        if (p < targetPhysical - KEEP_BACK || p > targetPhysical + keepForward) {
           closeAsset(asset);
           bitmapCacheRef.current.delete(key);
         }
       }
 
       // 2) Decode-ahead: keep the decode window aligned with the fetch corridor
-      //    (blobs for [t-4, t+16] are decoded BEFORE the playhead arrives).
-      for (let p = Math.max(1, targetPhysical - DECODE_BACK); p <= Math.min(TOTAL_PHYSICAL_FRAMES, targetPhysical + DECODE_FORWARD); p++) {
+      //    (blobs for [t-4, t+decodeForward] are decoded BEFORE the playhead arrives).
+      for (let p = Math.max(1, targetPhysical - DECODE_BACK); p <= Math.min(TOTAL_PHYSICAL_FRAMES, targetPhysical + decodeForward); p++) {
         enqueueDecode(`${variant}:${p}`);
       }
 
@@ -755,9 +764,9 @@ function ScrollytellingEngine({
 
       for (const s of STRIDE_ANCHORS) pushVirtual(centerVirtual + s * dir); // anchors ahead
       for (const s of [4, 8]) pushVirtual(centerVirtual - s * dir); // reverse safety anchors
-      const fwdLook = isForward ? LOOKAHEAD_FORWARD : LOOKAHEAD_BACKWARD;
+      const fwdLook = isForward ? lookaheadForward : LOOKAHEAD_BACKWARD;
       for (let i = 1; i <= fwdLook; i++) pushVirtual(centerVirtual + i * dir); // dense fill ahead
-      const backLook = isForward ? LOOKAHEAD_BACKWARD : LOOKAHEAD_FORWARD;
+      const backLook = isForward ? LOOKAHEAD_BACKWARD : lookaheadForward;
       for (let i = 1; i <= backLook; i++) pushVirtual(centerVirtual - i * dir); // dense fill behind
 
       if (noPacksRef.current) {
@@ -926,23 +935,24 @@ function ScrollytellingEngine({
       const targetWidth = Math.round(width * dpr);
       const targetHeight = Math.round(height * dpr);
 
-      if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+      let ctx = ctxRef.current;
+      if (canvas.width !== targetWidth || canvas.height !== targetHeight || !ctx) {
         canvas.width = targetWidth;
         canvas.height = targetHeight;
-      }
-
-      let ctx = ctxRef.current;
-      if (!ctx) {
-        ctx = canvas.getContext("2d", {
-          alpha: false,
-        }) as CanvasRenderingContext2D | null;
-        ctxRef.current = ctx;
+        if (!ctx) {
+          ctx = canvas.getContext("2d", {
+            alpha: false,
+            desynchronized: true, // low-latency direct compositor hint for 120Hz displays
+          }) as CanvasRenderingContext2D | null;
+          ctxRef.current = ctx;
+        }
+        if (ctx) {
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = "medium";
+        }
       }
       if (!ctx) return;
-
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = "medium";
 
       const imgWidth = "naturalWidth" in asset && asset.naturalWidth ? asset.naturalWidth : asset.width;
       const imgHeight = "naturalHeight" in asset && asset.naturalHeight ? asset.naturalHeight : asset.height;
@@ -1162,15 +1172,18 @@ function ScrollytellingEngine({
     if (!isReady) return;
 
     const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const isTouch = typeof window !== "undefined" && ("ontouchstart" in window || navigator.maxTouchPoints > 0);
 
     const lenis = new Lenis({
-      duration: prefersReducedMotion ? 0 : 0.85,
+      duration: prefersReducedMotion ? 0 : isTouch ? 0.65 : 0.85,
       easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
       orientation: "vertical",
       gestureOrientation: "vertical",
       smoothWheel: true,
       wheelMultiplier: 1.0,
-      touchMultiplier: 1.6,
+      touchMultiplier: isTouch ? 1.25 : 1.6,
+      syncTouch: isTouch,
+      syncTouchLerp: 0.12,
       infinite: false,
     });
 
@@ -1218,13 +1231,21 @@ function ScrollytellingEngine({
       const dt = Math.min(0.05, Math.max(0.001, (now - lastTimeRef.current) / 1000));
       lastTimeRef.current = now;
 
-      const velocity = (renderFloat - prevFloat) / dt;
+      const rawVelocity = (renderFloat - prevFloat) / dt;
+      // Exponential moving average for 120Hz velocity stabilization (filters 8ms RAF jitter)
+      const velocity = Math.abs(rawVelocity) < 0.05
+        ? 0
+        : scrollVelocityRef.current * 0.6 + rawVelocity * 0.4;
       scrollVelocityRef.current = velocity;
 
-      // Priority scheduler: run when the integer frame advances or velocity is high
+      // Priority scheduler: execute immediately when the integer frame advances,
+      // or throttle during fast flings to avoid allocating Sets/arrays 120 times/sec.
       const currentInt = Math.floor(renderFloat);
-      if (currentInt !== lastScheduledIntegerRef.current || Math.abs(velocity) > 3) {
+      const isIntegerAdvanced = currentInt !== lastScheduledIntegerRef.current;
+      const timeSinceLastSchedule = now - lastScheduleTimeRef.current;
+      if (isIntegerAdvanced || (Math.abs(velocity) > 3 && timeSinceLastSchedule > 25)) {
         lastScheduledIntegerRef.current = currentInt;
+        lastScheduleTimeRef.current = now;
         schedulePriorityBuffer(renderFloat, velocity);
       } else if (Math.abs(velocity) < 1.0 && urgentCountRef.current === 0) {
         scheduleIdleStreamRef.current();
@@ -1425,7 +1446,7 @@ function ScrollytellingEngine({
         {/* HTML5 High-Performance Scrollytelling Canvas */}
         <canvas
           ref={canvasRef}
-          className="absolute inset-0 w-full h-full object-cover z-0"
+          className="absolute inset-0 w-full h-full object-cover z-0 transform-gpu will-change-transform"
         />
 
         {/* Ambient Video (poster paints instantly; playback starts once the

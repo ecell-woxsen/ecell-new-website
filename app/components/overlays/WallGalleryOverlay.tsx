@@ -35,17 +35,26 @@ function WallGalleryOverlay({
     return () => window.removeEventListener("resize", updateScaleAndWidth);
   }, [onTrackWidthChange]);
 
-  // Real-time, 60/120fps synchronous center-card focus detector
+  // Real-time, 60/120fps center-card focus detector
   // Ensures whichever card or column is at the center of the viewport is strictly 100% opaque
   useEffect(() => {
     let rafId: number;
+    let lastCheck = 0;
 
-    const updateActiveCards = () => {
+    const updateActiveCards = (time: number) => {
+      rafId = requestAnimationFrame(updateActiveCards);
+
+      // 120Hz optimization: Throttle layout measurement to ~30Hz (every ~33ms).
+      // Reading getBoundingClientRect() 120 times/sec causes severe layout thrashing.
+      if (time - lastCheck < 33) return;
+      lastCheck = time;
+
       const track = trackRef.current;
-      if (!track) {
-        rafId = requestAnimationFrame(updateActiveCards);
-        return;
-      }
+      if (!track) return;
+
+      // Skip entirely if gallery is invisible or hidden
+      const parent = track.parentElement;
+      if (parent && getComputedStyle(parent).visibility === "hidden") return;
 
       const screenCenter = window.innerWidth / 2;
 
@@ -102,8 +111,6 @@ function WallGalleryOverlay({
           }
         });
       }
-
-      rafId = requestAnimationFrame(updateActiveCards);
     };
 
     rafId = requestAnimationFrame(updateActiveCards);
