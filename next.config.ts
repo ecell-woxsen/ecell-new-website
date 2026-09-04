@@ -15,6 +15,14 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "**.cloudflarestorage.com",
       },
+      {
+        protocol: "https",
+        hostname: "**.workers.dev",
+      },
+      {
+        protocol: "https",
+        hostname: "ecell-assets-cdn.ecell-main-website-new.workers.dev",
+      },
     ],
   },
   async headers() {
