@@ -757,6 +757,8 @@ export default function ScrollytellingEngine({
         (lastReportedFrameRef.current >= 50 && roundedFrame < 50) ||
         (lastReportedFrameRef.current < 350 && roundedFrame >= 350) ||
         (lastReportedFrameRef.current >= 350 && roundedFrame < 350) ||
+        (lastReportedFrameRef.current < 365 && roundedFrame >= 365) ||
+        (lastReportedFrameRef.current >= 365 && roundedFrame < 365) ||
         (lastReportedFrameRef.current < 425 && roundedFrame >= 425) ||
         (lastReportedFrameRef.current >= 425 && roundedFrame < 425) ||
         (lastReportedFrameRef.current < 598 && roundedFrame >= 598) ||
