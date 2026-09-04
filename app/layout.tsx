@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Bebas_Neue, DM_Sans, Space_Mono } from "next/font/google";
 import "./globals.css";
-import { getAssetUrl } from "./lib/assets";
+import { getAssetUrl, R2_PUBLIC_BASE_URL } from "./lib/assets";
 
 const bebasNeue = Bebas_Neue({
   weight: "400",
@@ -39,7 +39,9 @@ export const metadata: Metadata = {
     "Innovation",
   ],
   icons: {
-    icon: getAssetUrl("/ecell-logo.png"),
+    // Small dedicated favicon (the old icon was the full 1.42MB logo PNG —
+    // browsers downloaded the entire file just for a 28px tab icon).
+    icon: "/favicon-64.png",
   },
   openGraph: {
     title: "E-Cell Woxsen — Where Builders Start",
@@ -67,9 +69,22 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${bebasNeue.variable} ${dmSans.variable} ${spaceMono.variable} dark antialiased scroll-smooth`}
+      className={`${bebasNeue.variable} ${dmSans.variable} ${spaceMono.variable} dark antialiased`}
     >
       <body className="bg-[#040608] text-slate-100 font-sans selection:bg-emerald-500/30 selection:text-emerald-200 min-h-screen">
+        {/* Warm the asset CDN connection + first scrollytelling frame before
+            JS hydrates, so the boot corridor starts with a head start. The
+            media gate avoids wasting the preload on <1024px (720p) devices. */}
+        {R2_PUBLIC_BASE_URL ? (
+          <link rel="preconnect" href={R2_PUBLIC_BASE_URL} crossOrigin="anonymous" />
+        ) : null}
+        <link
+          rel="preload"
+          as="image"
+          href={getAssetUrl("/ecell_shots/00001.webp")}
+          fetchPriority="high"
+          media="(min-width: 1024px)"
+        />
         {children}
       </body>
     </html>

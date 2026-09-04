@@ -126,7 +126,6 @@ export default function EventsWallSection({
                 fill
                 className="object-cover transition-transform duration-700 ease-out group-hover:scale-[1.02]"
                 sizes="(max-width: 768px) 85vw, 620px"
-                priority
               />
               {/* Atmospheric lighting gradient */}
               <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/10 pointer-events-none" />

@@ -17,32 +17,116 @@ interface ScrollytellingEngineProps {
 }
 
 const TOTAL_FRAMES = 1262; // Virtual timeline length (scroll track, events, team & contact overlays)
-const CRITICAL_PRELOAD_COUNT = 24; // Contiguous initial runway for instant butter-smooth boot
 const SCROLL_TRACK_HEIGHT = TOTAL_FRAMES * 12; // 15,144px scroll track for 1:1 frame pacing
-const MAX_CONCURRENT_REQUESTS = 6; // Optimal concurrent HTTP/2 streams per domain
-const LOOKAHEAD_FORWARD = 32; // Directional lookahead corridor
-const LOOKAHEAD_BACKWARD = 8; // Safety buffer behind the playhead
-const PLAYHEAD_WINDOW = 3; // Immediate high-priority playhead target window
+
+// ---------------------------------------------------------------------------
+// LOADING PIPELINE TUNING
+// ---------------------------------------------------------------------------
+// Hero video covers frames 1-15, so the boot corridor only needs ~14 contiguous
+// frames before reveal (was 24 — the video hid most of them).
+const CRITICAL_PRELOAD_COUNT = 14;
+const BOOT_TIMEOUT_MS = 2500;
+
+// Unified concurrency budget. On the R2 worker CDN (HTTP/2) 8 parallel streams
+// is comfortable; on an HTTP/1.1 fallback origin the browser queues these on
+// 6 connections without breaking anything.
+const MAX_URGENT_CONCURRENT = 8;
+const MAX_IDLE_CONCURRENT = 2; // idle streamer runs only when zero urgent requests exist
+
+// Coarse-first corridor: fetch stride anchors (t, +/-4, +/-8, +/-16, +/-32)
+// before filling the gaps, so a cold fling or nav jump always lands within
+// <=4 frames of a loaded anchor while the dense corridor catches up.
+const STRIDE_ANCHORS = [0, 4, 8, 16, 32] as const;
+const LOOKAHEAD_FORWARD = 32;
+const LOOKAHEAD_BACKWARD = 12;
+const PREFETCH_ABORT_DISTANCE = 40; // abort in-flight requests this far from the playhead
+
+// Decode pipeline: decode-ahead window aligned with the fetch corridor (the old
+// decode window [t-3, t+10] was far smaller than the fetch window, so frames
+// arrived downloaded-but-undecoded and triggered micro-stutter), with a hard
+// concurrency cap to prevent decode storms during post-warm flings.
+const DECODE_BACK = 4;
+const DECODE_FORWARD = 16;
+const MAX_CONCURRENT_DECODES = 4;
+
+// Bitmap keep window (pruned every scheduler tick)
+const KEEP_BACK = 8;
+const KEEP_FORWARD = 24;
+
+// Failed-frame retry with exponential backoff (previously failures left
+// permanent holes that were re-fetched on every corridor pass).
+const RETRY_LIMIT = 3;
+const RETRY_BASE_DELAY_MS = 400;
+
+const VARIANT_SWITCH_DEBOUNCE_MS = 300;
+const RESIZE_DEBOUNCE_MS = 150;
 
 // Image asset type: ImageBitmap (decoded off-main-thread) or HTMLImageElement fallback
 type FrameAsset = ImageBitmap | HTMLImageElement;
 
+const physOfKey = (key: string): number => parseInt(key.slice(key.indexOf(":") + 1), 10);
+const closeAsset = (asset: FrameAsset) => {
+  if ("close" in asset && typeof asset.close === "function") asset.close();
+};
+
+// ---------------------------------------------------------------------------
+// KPI TELEMETRY (inspect via window.__frameStats; add ?debug to the URL for
+// console output every 5s). staleDraws is the smoothness KPI: draws where the
+// drawn frame is more than 2 frames away from the scroll target.
+// ---------------------------------------------------------------------------
+const stats = {
+  drawn: 0,
+  staleDraws: 0,
+  netRequests: 0,
+  dedupedHits: 0,
+  netErrors: 0,
+  decodes: 0,
+  decodeDrops: 0,
+};
+if (typeof window !== "undefined") {
+  (window as unknown as { __frameStats?: typeof stats }).__frameStats = stats;
+}
+
 // Safe cross-browser idle callback helper (with iOS/Safari fallback)
-const requestIdle =
+type IdleHandle = number;
+const requestIdle: (cb: () => void) => IdleHandle =
   typeof window !== "undefined" && "requestIdleCallback" in window
-    ? (cb: () => void) =>
+    ? (cb) =>
         (window as Window & { requestIdleCallback: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback(
           cb,
           { timeout: 1000 }
         )
-    : (cb: () => void) => setTimeout(cb, 60);
+    : (cb) => setTimeout(cb, 60) as unknown as IdleHandle;
 
-const cancelIdle =
+const cancelIdle: (id: IdleHandle) => void =
   typeof window !== "undefined" && "cancelIdleCallback" in window
-    ? (id: any) =>
+    ? (id) =>
         (window as Window & { cancelIdleCallback: (id: number) => void }).cancelIdleCallback(id)
-    : (id: any) => clearTimeout(id);
+    : (id) => clearTimeout(id as unknown as ReturnType<typeof setTimeout>);
 
+// Native off-thread bitmap decoder (no slow software resampler on the main thread)
+const decodeViaImageElement = (blob: Blob): Promise<FrameAsset | null> =>
+  new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    const objectUrl = URL.createObjectURL(blob);
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(img);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(null);
+    };
+    img.src = objectUrl;
+  });
+
+const decodeAsset = (blob: Blob): Promise<FrameAsset | null> => {
+  if (typeof window !== "undefined" && "createImageBitmap" in window) {
+    return createImageBitmap(blob).catch(() => decodeViaImageElement(blob));
+  }
+  return decodeViaImageElement(blob);
+};
 
 export default function ScrollytellingEngine({
   onFrameUpdate,
@@ -59,22 +143,34 @@ export default function ScrollytellingEngine({
   const lenisRef = useRef<Lenis | null>(null);
 
   // =========================================================================
-  // ZERO-LAG TWO-TIER ARCHITECTURE WITH 625-840 WALL LOOP
+  // UNIFIED TWO-TIER CACHE (variant-scoped keys: "<variant>:<physicalFrame>")
   // =========================================================================
-  // Tier 1: Permanent Compressed Blobs (~50 KB each; only 840 unique physical frames = ~41 MB total)
-  // Virtual frames 841–1262 map to physical frames 625–840, requiring ZERO network downloads!
-  const blobCacheRef = useRef<Map<number, Blob>>(new Map());
+  // Tier 1: compressed blobs (all 840 physical frames eventually, via the idle
+  // streamer). Keys are variant-scoped so a 1024px breakpoint crossing can
+  // invalidate cleanly instead of silently mixing 720p/1080p playback.
+  const blobCacheRef = useRef<Map<string, Blob>>(new Map());
 
-  // Tier 2: Active GPU Bitmaps (strictly ~35 frames = ~290 MB GPU VRAM ceiling)
-  // Pruned dynamically as the user scrolls. Evicted bitmaps call asset.close() immediately.
-  const bitmapCacheRef = useRef<Map<number, FrameAsset>>(new Map());
-  const inFlightDecodesRef = useRef<Set<number>>(new Set());
+  // Tier 2: decoded GPU bitmaps, strictly pruned to [playhead-8, playhead+24].
+  const bitmapCacheRef = useRef<Map<string, FrameAsset>>(new Map());
 
-  // Active network download controllers & preloader state
-  const activeControllersRef = useRef<Map<number, AbortController>>(new Map());
-  const inFlightCountRef = useRef(0);
+  // Unified in-flight registry — ONE place tracks every network request
+  // (boot, urgent corridor and idle streamer all share it). Fixes the old
+  // boot double-fetch bug (boot requests were invisible to the scheduler)
+  // and the in-flight counter double-decrement drift.
+  const inflightRef = useRef<Map<string, { controller: AbortController; priority: "urgent" | "idle"; physical: number }>>(new Map());
+  const urgentCountRef = useRef(0);
+  const idleCountRef = useRef(0);
+  const unmountedRef = useRef(false);
+
+  // Decode pipeline state (bounded concurrency + FIFO queue with jump slots)
+  const decodeInflightRef = useRef<Set<string>>(new Set());
+  const decodeQueueRef = useRef<string[]>([]);
+  const decodeQueuedRef = useRef<Set<string>>(new Set());
+
+  // Scheduling handles
+  const idleHandleRef = useRef<IdleHandle | null>(null);
   const lastScheduledIntegerRef = useRef<number>(-1);
-  const idleHandleRef = useRef<any>(null);
+  const scheduleRef = useRef<((center: number, velocity: number) => void) | null>(null);
   const scheduleIdleStreamRef = useRef<() => void>(() => {});
 
   // React state for boot & overlays
@@ -84,356 +180,322 @@ export default function ScrollytellingEngine({
 
   // Rendering & window dimension refs
   const currentFrameRef = useRef(1);
-  const lastTimeRef = useRef(performance.now());
+  const lastTimeRef = useRef(0); // set on the first RAF tick (pure init)
   const lastReportedFrameRef = useRef<number>(1);
   const maxGalleryWidthRef = useRef(3200);
   const windowWidthRef = useRef(typeof window !== "undefined" ? window.innerWidth : 1920);
   const windowHeightRef = useRef(typeof window !== "undefined" ? window.innerHeight : 1080);
   const scrollVelocityRef = useRef(0);
+  const maxScrollRef = useRef(1);
 
-  // 60Hz & 120Hz High-Refresh GPU Fillrate Optimization Refs
+  // Redraw/skip guards
   const lastDrawnFrameRef = useRef<number>(-1);
   const lastDrawnWidthRef = useRef<number>(0);
   const lastDrawnHeightRef = useRef<number>(0);
+
+  // Change-gated style write cache (skip identical setProperty calls per frame)
+  const lastCssRef = useRef<Record<string, string>>({});
+  const videoPausedRef = useRef(false);
 
   // Adaptive Resolution: "720p" for mobile/tablet (<1024px), "1080p" for desktop
   const assetVariantRef = useRef<"1080p" | "720p">(
     typeof window !== "undefined" && window.innerWidth < 1024 ? "720p" : "1080p"
   );
 
-  // Helper to format frame CDN URL using active adaptive resolution variant
-  const getFramePath = useCallback((frameNum: number) => {
-    return getFrameUrl(frameNum, assetVariantRef.current);
+  // =========================================================================
+  // UNIFIED FRAME LOADER
+  // =========================================================================
+  // Single entry point for every frame network request:
+  //  - dedupes against blob cache AND in-flight requests (fixes boot double-fetch)
+  //  - upgrades idle requests to urgent when the playhead needs them
+  //  - preempts far-away in-flight requests when urgent slots are exhausted
+  //  - retries transient failures with exponential backoff
+  //  - single ownership of counter/map cleanup in .finally (fixes count drift)
+  // Returns true only when a new network request was actually started.
+  const dispatchFetch = useCallback((physical: number, priority: "urgent" | "idle"): boolean => {
+    const variant = assetVariantRef.current;
+    const key = `${variant}:${physical}`;
+
+    if (blobCacheRef.current.has(key)) return false; // already downloaded
+
+    const existing = inflightRef.current.get(key);
+    if (existing) {
+      if (priority === "urgent" && existing.priority === "idle") {
+        // Upgrade: abort the idle request; its own .finally owns cleanup.
+        existing.controller.abort();
+        // fall through and dispatch a fresh urgent request below
+      } else {
+        stats.dedupedHits++;
+        return false; // dedupe: already in flight at sufficient priority
+      }
+    }
+
+    if (priority === "urgent") {
+      if (urgentCountRef.current >= MAX_URGENT_CONCURRENT) {
+        // Preempt distant in-flight requests; each aborted request's .finally
+        // kicks the scheduler, which re-dispatches this corridor immediately.
+        const curPhys = getPhysicalFrameNumber(currentFrameRef.current);
+        for (const entry of inflightRef.current.values()) {
+          if (Math.abs(entry.physical - curPhys) > PREFETCH_ABORT_DISTANCE) {
+            entry.controller.abort();
+          }
+        }
+        return false; // slots free asynchronously; the completion kick re-dispatches
+      }
+    } else {
+      // Idle traffic only runs when the urgent pipeline is completely idle.
+      if (urgentCountRef.current > 0 || idleCountRef.current >= MAX_IDLE_CONCURRENT) return false;
+    }
+
+    const controller = new AbortController();
+    inflightRef.current.set(key, { controller, priority, physical });
+    if (priority === "urgent") urgentCountRef.current++;
+    else idleCountRef.current++;
+    stats.netRequests++;
+
+    const url = getFrameUrl(physical, variant);
+
+    const attempt = (triesLeft: number): Promise<void> =>
+      fetch(url, { signal: controller.signal, cache: "force-cache" })
+        .then(async (res) => {
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          return res.blob();
+        })
+        .then((blob) => {
+          if (assetVariantRef.current === variant) {
+            blobCacheRef.current.set(key, blob);
+          }
+        })
+        .catch(async (err) => {
+          if (err && err.name === "AbortError") return;
+          stats.netErrors++;
+          if (
+            triesLeft > 0 &&
+            !controller.signal.aborted &&
+            assetVariantRef.current === variant
+          ) {
+            await new Promise<void>((r) =>
+              setTimeout(r, RETRY_BASE_DELAY_MS * Math.pow(2, RETRY_LIMIT - triesLeft))
+            );
+            if (!controller.signal.aborted && assetVariantRef.current === variant) {
+              return attempt(triesLeft - 1);
+            }
+          }
+        });
+
+    attempt(RETRY_LIMIT).finally(() => {
+      // SINGLE ownership of counter + map cleanup. The abort/preempt paths never
+      // touch these — the old code decremented in both places and drifted.
+      if (priority === "urgent") urgentCountRef.current = Math.max(0, urgentCountRef.current - 1);
+      else idleCountRef.current = Math.max(0, idleCountRef.current - 1);
+
+      const entry = inflightRef.current.get(key);
+      if (entry && entry.controller === controller) inflightRef.current.delete(key);
+
+      if (!unmountedRef.current) {
+        scheduleRef.current?.(currentFrameRef.current, scrollVelocityRef.current);
+        scheduleIdleStreamRef.current();
+      }
+    });
+
+    return true;
   }, []);
 
+  // =========================================================================
+  // DECODE PIPELINE (bounded concurrency, stale-drop, JIT jump slots)
+  // =========================================================================
+  const pumpDecodeQueueRef = useRef<() => void>(() => {});
 
-  // Native Off-Thread Bitmap Decoder (Fast native GPU decode, no slow software resampler)
-  const decodeBlobToBitmap = useCallback(
-    async (physicalFrameIdx: number): Promise<FrameAsset | null> => {
-      const blob = blobCacheRef.current.get(physicalFrameIdx);
-      if (!blob) return null;
+  const pumpDecodeQueue = useCallback(() => {
+    while (decodeInflightRef.current.size < MAX_CONCURRENT_DECODES && decodeQueueRef.current.length > 0) {
+      const key = decodeQueueRef.current.shift()!;
+      decodeQueuedRef.current.delete(key);
 
-      if (typeof window !== "undefined" && "createImageBitmap" in window) {
-        try {
-          return await createImageBitmap(blob);
-        } catch {
-          // Fallback below
-        }
+      const colon = key.indexOf(":");
+      const variant = key.slice(0, colon);
+      const phys = physOfKey(key);
+
+      // Drop stale queue entries (variant flipped, or playhead moved far past)
+      if (variant !== assetVariantRef.current) {
+        stats.decodeDrops++;
+        continue;
+      }
+      const curPhys = getPhysicalFrameNumber(currentFrameRef.current);
+      if (Math.abs(phys - curPhys) > KEEP_FORWARD + 16) {
+        stats.decodeDrops++;
+        continue;
       }
 
-      return new Promise((resolve) => {
-        const img = new Image();
-        img.crossOrigin = "anonymous";
-        const objectUrl = URL.createObjectURL(blob);
-        img.onload = () => {
-          URL.revokeObjectURL(objectUrl);
-          resolve(img);
-        };
-        img.onerror = () => {
-          URL.revokeObjectURL(objectUrl);
-          resolve(null);
-        };
-        img.src = objectUrl;
+      const blob = blobCacheRef.current.get(key);
+      if (!blob || bitmapCacheRef.current.has(key)) continue;
+
+      decodeInflightRef.current.add(key);
+      stats.decodes++;
+      decodeAsset(blob).then((asset) => {
+        decodeInflightRef.current.delete(key);
+        if (asset) {
+          if (!unmountedRef.current) {
+            const cur = getPhysicalFrameNumber(currentFrameRef.current);
+            if (variant === assetVariantRef.current && Math.abs(phys - cur) <= KEEP_FORWARD + 16) {
+              bitmapCacheRef.current.set(key, asset);
+              if (Math.abs(phys - cur) <= 1) {
+                lastDrawnFrameRef.current = -1; // fresh playhead frame — force redraw
+              }
+            } else {
+              closeAsset(asset); // stale completion — release immediately
+              stats.decodeDrops++;
+            }
+          } else {
+            closeAsset(asset); // component unmounted — release immediately
+          }
+        }
+        if (!unmountedRef.current) pumpDecodeQueueRef.current();
       });
-    },
-    []
-  );
-
-  // Find nearest preceding contiguous loaded physical frame without any Promise delays
-  const findNearestLoadedFrame = useCallback((targetPhysical: number): number => {
-    const cache = bitmapCacheRef.current;
-    if (cache.has(targetPhysical)) return targetPhysical;
-
-    // Search backward first (hold closest past frame along travel trajectory)
-    const minBack = Math.max(1, targetPhysical - 35);
-    for (let f = targetPhysical - 1; f >= minBack; f--) {
-      if (cache.has(f)) return f;
     }
-
-    // Search forward if backward has none
-    const maxForward = Math.min(TOTAL_PHYSICAL_FRAMES, targetPhysical + 15);
-    for (let f = targetPhysical + 1; f <= maxForward; f++) {
-      if (cache.has(f)) return f;
-    }
-
-    // Fallback to last successfully drawn frame, or any loaded bitmap
-    if (lastDrawnFrameRef.current !== -1 && cache.has(lastDrawnFrameRef.current)) {
-      return lastDrawnFrameRef.current;
-    }
-
-    return cache.size > 0 ? (cache.keys().next().value ?? 1) : 1;
   }, []);
 
-  // Playhead-First Priority Preloader with 625-840 Wall Loop Support
+  useEffect(() => {
+    pumpDecodeQueueRef.current = pumpDecodeQueue;
+  }, [pumpDecodeQueue]);
+
+  const enqueueDecode = useCallback(
+    (key: string, jumpQueue = false) => {
+      if (decodeInflightRef.current.has(key) || decodeQueuedRef.current.has(key)) return;
+      if (!blobCacheRef.current.has(key) || bitmapCacheRef.current.has(key)) return;
+      decodeQueuedRef.current.add(key);
+      if (jumpQueue) decodeQueueRef.current.unshift(key);
+      else decodeQueueRef.current.push(key);
+      pumpDecodeQueue();
+    },
+    [pumpDecodeQueue]
+  );
+
+  // Find nearest loaded bitmap key for the current variant, preferring the
+  // preceding frame along the travel trajectory.
+  const findNearestLoadedKey = useCallback((targetPhysical: number): string | null => {
+    const variant = assetVariantRef.current;
+    let bestKey: string | null = null;
+    let bestDist = Infinity;
+    let bestPreceding = false;
+    for (const [key] of bitmapCacheRef.current) {
+      const colon = key.indexOf(":");
+      if (key.slice(0, colon) !== variant) continue;
+      const p = physOfKey(key);
+      const dist = Math.abs(p - targetPhysical);
+      const preceding = p <= targetPhysical;
+      if (
+        dist < bestDist ||
+        (dist === bestDist && preceding && !bestPreceding)
+      ) {
+        bestKey = key;
+        bestDist = dist;
+        bestPreceding = preceding;
+      }
+    }
+    return bestKey;
+  }, []);
+
+  // =========================================================================
+  // PLAYHEAD-FIRST PRIORITY SCHEDULER (coarse-first corridor)
+  // =========================================================================
   const schedulePriorityBuffer = useCallback(
     (centerFloat: number, velocity: number) => {
       const centerVirtual = Math.min(TOTAL_FRAMES, Math.max(1, Math.round(centerFloat)));
       const targetPhysical = getPhysicalFrameNumber(centerVirtual);
       const isForward = velocity >= -0.05;
+      const dir = isForward ? 1 : -1;
+      const variant = assetVariantRef.current;
 
-      // 1. Prune GPU Bitmaps outside [targetPhysical - 8, targetPhysical + 32]
-      const minKeep = Math.max(1, targetPhysical - 8);
-      const maxKeep = Math.min(TOTAL_PHYSICAL_FRAMES, targetPhysical + 32);
-
-      for (const [idx, asset] of bitmapCacheRef.current.entries()) {
-        if (idx < minKeep || idx > maxKeep) {
-          if ("close" in asset && typeof asset.close === "function") {
-            asset.close(); // Instantly reclaim ~8.3 MB of GPU texture VRAM
-          }
-          bitmapCacheRef.current.delete(idx);
+      // 1) Prune decoded bitmaps outside [target-KEEP_BACK, target+KEEP_FORWARD]
+      for (const [key, asset] of bitmapCacheRef.current) {
+        if (!key.startsWith(`${variant}:`)) {
+          closeAsset(asset); // stale variant (defensive — flip handler clears these)
+          bitmapCacheRef.current.delete(key);
+          continue;
+        }
+        const p = physOfKey(key);
+        if (p < targetPhysical - KEEP_BACK || p > targetPhysical + KEEP_FORWARD) {
+          closeAsset(asset);
+          bitmapCacheRef.current.delete(key);
         }
       }
 
-      // 2. High-Priority JIT Decode for frames already in blobCache but not in bitmapCache
-      // Focus on immediate physical playhead window: [targetPhysical - 3, targetPhysical + 10]
-      const nearStart = Math.max(1, targetPhysical - 3);
-      const nearEnd = Math.min(TOTAL_PHYSICAL_FRAMES, targetPhysical + 10);
-      for (let f = nearStart; f <= nearEnd; f++) {
-        if (
-          blobCacheRef.current.has(f) &&
-          !bitmapCacheRef.current.has(f) &&
-          !inFlightDecodesRef.current.has(f)
-        ) {
-          inFlightDecodesRef.current.add(f);
-          decodeBlobToBitmap(f).then((asset) => {
-            inFlightDecodesRef.current.delete(f);
-            if (asset) {
-              bitmapCacheRef.current.set(f, asset);
-              const curPhysical = getPhysicalFrameNumber(currentFrameRef.current);
-              if (Math.abs(curPhysical - f) <= 1) {
-                lastDrawnFrameRef.current = -1;
-              }
-            }
-          });
-        }
+      // 2) Decode-ahead: keep the decode window aligned with the fetch corridor
+      //    (blobs for [t-4, t+16] are decoded BEFORE the playhead arrives).
+      for (let p = Math.max(1, targetPhysical - DECODE_BACK); p <= Math.min(TOTAL_PHYSICAL_FRAMES, targetPhysical + DECODE_FORWARD); p++) {
+        enqueueDecode(`${variant}:${p}`);
       }
 
-      // 3. Build prioritized physical queue
-      const priorityPhysical: number[] = [];
+      // 3) Coarse-first fetch order: stride anchors land first so cold jumps
+      //    and hard flings always have a nearby anchor frame, then the dense
+      //    corridor fills the gaps.
+      const order: number[] = [];
       const seen = new Set<number>();
-
-      // Urgent: playhead and immediate adjacent virtual frames
-      for (let i = 0; i <= PLAYHEAD_WINDOW; i++) {
-        const v = isForward ? centerVirtual + i : centerVirtual - i;
-        if (v >= 1 && v <= TOTAL_FRAMES) {
-          const p = getPhysicalFrameNumber(v);
-          if (!seen.has(p) && !blobCacheRef.current.has(p) && !activeControllersRef.current.has(p)) {
-            priorityPhysical.push(p);
-            seen.add(p);
-          }
+      const pushVirtual = (v: number) => {
+        if (v < 1 || v > TOTAL_FRAMES) return;
+        const p = getPhysicalFrameNumber(v);
+        if (!seen.has(p)) {
+          seen.add(p);
+          order.push(p);
         }
-      }
+      };
 
-      // Lookahead corridor along trajectory
-      const lookahead = isForward ? LOOKAHEAD_FORWARD : LOOKAHEAD_BACKWARD;
-      for (let i = PLAYHEAD_WINDOW + 1; i <= lookahead; i++) {
-        const v = isForward ? centerVirtual + i : centerVirtual - i;
-        if (v >= 1 && v <= TOTAL_FRAMES) {
-          const p = getPhysicalFrameNumber(v);
-          if (!seen.has(p) && !blobCacheRef.current.has(p) && !activeControllersRef.current.has(p)) {
-            priorityPhysical.push(p);
-            seen.add(p);
-          }
-        }
-      }
+      for (const s of STRIDE_ANCHORS) pushVirtual(centerVirtual + s * dir); // anchors ahead
+      for (const s of [4, 8]) pushVirtual(centerVirtual - s * dir); // reverse safety anchors
+      const fwdLook = isForward ? LOOKAHEAD_FORWARD : LOOKAHEAD_BACKWARD;
+      for (let i = 1; i <= fwdLook; i++) pushVirtual(centerVirtual + i * dir); // dense fill ahead
+      const backLook = isForward ? LOOKAHEAD_BACKWARD : LOOKAHEAD_FORWARD;
+      for (let i = 1; i <= backLook; i++) pushVirtual(centerVirtual - i * dir); // dense fill behind
 
-      // Safety corridor behind trajectory
-      const backwardLook = isForward ? LOOKAHEAD_BACKWARD : LOOKAHEAD_FORWARD;
-      for (let i = 1; i <= backwardLook; i++) {
-        const v = isForward ? centerVirtual - i : centerVirtual + i;
-        if (v >= 1 && v <= TOTAL_FRAMES) {
-          const p = getPhysicalFrameNumber(v);
-          if (!seen.has(p) && !blobCacheRef.current.has(p) && !activeControllersRef.current.has(p)) {
-            priorityPhysical.push(p);
-            seen.add(p);
-          }
-        }
-      }
-
-      // 4. Preempt distant in-flight requests if playhead is starving!
-      const targetNeedsFetch = !blobCacheRef.current.has(targetPhysical) && !activeControllersRef.current.has(targetPhysical);
-      if (targetNeedsFetch && inFlightCountRef.current >= MAX_CONCURRENT_REQUESTS) {
-        for (const [frameIdx, controller] of activeControllersRef.current.entries()) {
-          if (Math.abs(frameIdx - targetPhysical) > 10) {
-            controller.abort();
-            activeControllersRef.current.delete(frameIdx);
-            inFlightCountRef.current = Math.max(0, inFlightCountRef.current - 1);
-            if (inFlightCountRef.current < MAX_CONCURRENT_REQUESTS) break;
-          }
-        }
-      }
-
-      // Also abort any active controller that has drifted far (> 40 frames away)
-      for (const [frameIdx, controller] of activeControllersRef.current.entries()) {
-        if (Math.abs(frameIdx - targetPhysical) > 40) {
-          controller.abort();
-          activeControllersRef.current.delete(frameIdx);
-          inFlightCountRef.current = Math.max(0, inFlightCountRef.current - 1);
-        }
-      }
-
-      // 5. Dispatch network requests from priorityPhysical up to MAX_CONCURRENT_REQUESTS
-      for (const frameToFetch of priorityPhysical) {
-        if (inFlightCountRef.current >= MAX_CONCURRENT_REQUESTS) break;
-
-        const controller = new AbortController();
-        activeControllersRef.current.set(frameToFetch, controller);
-        inFlightCountRef.current++;
-
-        const url = getFramePath(frameToFetch);
-
-        fetch(url, { signal: controller.signal, cache: "force-cache" })
-          .then(async (res) => {
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            return await res.blob();
-          })
-          .then((blob) => {
-            activeControllersRef.current.delete(frameToFetch);
-            inFlightCountRef.current = Math.max(0, inFlightCountRef.current - 1);
-
-            // Store compressed Blob permanently in memory (~50 KB)
-            blobCacheRef.current.set(frameToFetch, blob);
-
-            // If this physical frame is within the near-field window, decode it to bitmap immediately
-            const curPhysical = getPhysicalFrameNumber(currentFrameRef.current);
-            const dist = Math.abs(frameToFetch - curPhysical);
-            if (dist <= 15) {
-              inFlightDecodesRef.current.add(frameToFetch);
-              decodeBlobToBitmap(frameToFetch).then((asset) => {
-                inFlightDecodesRef.current.delete(frameToFetch);
-                if (asset) {
-                  bitmapCacheRef.current.set(frameToFetch, asset);
-                  if (curPhysical === frameToFetch || dist <= 1) {
-                    lastDrawnFrameRef.current = -1;
-                  }
-                }
-              });
-            }
-
-            // Immediately trigger next queue tick
-            schedulePriorityBuffer(currentFrameRef.current, scrollVelocityRef.current);
-          })
-          .catch((err) => {
-            activeControllersRef.current.delete(frameToFetch);
-            inFlightCountRef.current = Math.max(0, inFlightCountRef.current - 1);
-            if (err.name !== "AbortError") {
-              // Transient network glitch, allowed to retry
-            }
-          });
-      }
+      for (const p of order) dispatchFetch(p, "urgent");
     },
-    [decodeBlobToBitmap, getFramePath]
+    [dispatchFetch, enqueueDecode]
   );
 
   // =========================================================================
-  // BACKGROUND IDLE STREAMER (STRATEGY 1)
+  // BACKGROUND IDLE STREAMER
   // =========================================================================
-  // Quietly downloads remaining compressed WebP blobs into RAM (~45 MB) when
-  // the user is idle or scrolling gently. Runs at low concurrency (<= 2) so it
-  // never competes with real-time scrolling priority buffers.
+  // Quietly downloads the remaining compressed WebP blobs into RAM when the
+  // user is idle (urgent pipeline empty, no active fling) — 2 at a time.
   const scheduleIdleStream = useCallback(() => {
     if (idleHandleRef.current !== null) return;
-    if (blobCacheRef.current.size >= TOTAL_PHYSICAL_FRAMES) return;
+    if (urgentCountRef.current > 0) return;
+
+    const variant = assetVariantRef.current;
+    let blobCount = 0;
+    for (const k of blobCacheRef.current.keys()) {
+      if (k.startsWith(`${variant}:`)) blobCount++;
+    }
+    if (blobCount >= TOTAL_PHYSICAL_FRAMES) return; // fully warmed
 
     idleHandleRef.current = requestIdle(() => {
       idleHandleRef.current = null;
+      if (urgentCountRef.current > 0 || Math.abs(scrollVelocityRef.current) > 2) return;
 
-      // Ensure network pipeline has room and user is not rapidly flinging
-      if (Math.abs(scrollVelocityRef.current) > 2 || inFlightCountRef.current >= 2) {
-        return;
+      const curPhys = getPhysicalFrameNumber(currentFrameRef.current);
+      let dispatched = 0;
+
+      // Forward corridor from playhead first, then backward to the beginning
+      for (let f = curPhys; f <= TOTAL_PHYSICAL_FRAMES && dispatched < MAX_IDLE_CONCURRENT; f++) {
+        if (dispatchFetch(f, "idle")) dispatched++;
       }
-
-      if (blobCacheRef.current.size >= TOTAL_PHYSICAL_FRAMES) {
-        return;
-      }
-
-      const curPhysical = getPhysicalFrameNumber(currentFrameRef.current);
-      const candidates: number[] = [];
-
-      // 1. First priority: forward corridor from current frame to end of sequence
-      for (let f = curPhysical; f <= TOTAL_PHYSICAL_FRAMES; f++) {
-        if (!blobCacheRef.current.has(f) && !activeControllersRef.current.has(f)) {
-          candidates.push(f);
-          if (candidates.length >= 2) break;
+      if (dispatched < MAX_IDLE_CONCURRENT) {
+        for (let f = curPhys - 1; f >= 1 && dispatched < MAX_IDLE_CONCURRENT; f--) {
+          if (dispatchFetch(f, "idle")) dispatched++;
         }
       }
-
-      // 2. Second priority: backward corridor from current frame to beginning
-      if (candidates.length < 2) {
-        for (let f = curPhysical - 1; f >= 1; f--) {
-          if (!blobCacheRef.current.has(f) && !activeControllersRef.current.has(f)) {
-            candidates.push(f);
-            if (candidates.length >= 2) break;
-          }
-        }
-      }
-
-      if (candidates.length === 0) return;
-
-      for (const frameToFetch of candidates) {
-        if (inFlightCountRef.current >= 2) break;
-
-        const controller = new AbortController();
-        activeControllersRef.current.set(frameToFetch, controller);
-        inFlightCountRef.current++;
-
-        const url = getFramePath(frameToFetch);
-
-        fetch(url, { signal: controller.signal, cache: "force-cache" })
-          .then(async (res) => {
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            return await res.blob();
-          })
-          .then((blob) => {
-            activeControllersRef.current.delete(frameToFetch);
-            inFlightCountRef.current = Math.max(0, inFlightCountRef.current - 1);
-
-            // Store compressed WebP blob permanently in RAM (~20-50 KB)
-            blobCacheRef.current.set(frameToFetch, blob);
-
-            // If within active near-field window, decode to GPU bitmap immediately
-            const nowPhysical = getPhysicalFrameNumber(currentFrameRef.current);
-            const dist = Math.abs(frameToFetch - nowPhysical);
-            if (
-              dist <= 15 &&
-              !bitmapCacheRef.current.has(frameToFetch) &&
-              !inFlightDecodesRef.current.has(frameToFetch)
-            ) {
-              inFlightDecodesRef.current.add(frameToFetch);
-              decodeBlobToBitmap(frameToFetch).then((asset) => {
-                inFlightDecodesRef.current.delete(frameToFetch);
-                if (asset) {
-                  bitmapCacheRef.current.set(frameToFetch, asset);
-                  if (nowPhysical === frameToFetch || dist <= 1) {
-                    lastDrawnFrameRef.current = -1;
-                  }
-                }
-              });
-            }
-
-            // Continue idle filling if user is still idle
-            if (Math.abs(scrollVelocityRef.current) < 2) {
-              scheduleIdleStream();
-            }
-          })
-          .catch((err) => {
-            activeControllersRef.current.delete(frameToFetch);
-            inFlightCountRef.current = Math.max(0, inFlightCountRef.current - 1);
-            if (err.name !== "AbortError") {
-              scheduleIdleStream();
-            }
-          });
-      }
+      // Continuation is driven by each request's .finally kick.
     });
-  }, [decodeBlobToBitmap, getFramePath]);
+  }, [dispatchFetch]);
 
   useEffect(() => {
     scheduleIdleStreamRef.current = scheduleIdleStream;
-  }, [scheduleIdleStream]);
+    scheduleRef.current = (center, velocity) => schedulePriorityBuffer(center, velocity);
+  }, [scheduleIdleStream, schedulePriorityBuffer]);
 
-
-  // Canvas drawing function optimized for 60Hz & 120Hz displays
-  // Uses discrete contiguous frames to completely eliminate double-exposure ghosting and teleport snaps
+  // =========================================================================
+  // CANVAS RENDER (variant-scoped, KPI-instrumented)
+  // =========================================================================
   const drawFrameToCanvas = useCallback(
     (frameFloat: number) => {
       const canvas = canvasRef.current;
@@ -442,37 +504,29 @@ export default function ScrollytellingEngine({
       const clamped = Math.min(TOTAL_FRAMES, Math.max(1, frameFloat));
       const targetInt = Math.floor(clamped);
       const targetPhysical = getPhysicalFrameNumber(targetInt);
+      const variant = assetVariantRef.current;
+      const targetKey = `${variant}:${targetPhysical}`;
 
-      // Resolve best available loaded frame (target or nearest preceding contiguous loaded frame)
-      let frameToDraw = targetPhysical;
-      if (!bitmapCacheRef.current.has(frameToDraw)) {
-        // If blob is available, trigger instant JIT decode
-        if (blobCacheRef.current.has(targetPhysical) && !inFlightDecodesRef.current.has(targetPhysical)) {
-          inFlightDecodesRef.current.add(targetPhysical);
-          decodeBlobToBitmap(targetPhysical).then((asset) => {
-            inFlightDecodesRef.current.delete(targetPhysical);
-            if (asset) {
-              bitmapCacheRef.current.set(targetPhysical, asset);
-              lastDrawnFrameRef.current = -1;
-            }
-          });
-        }
-        frameToDraw = findNearestLoadedFrame(targetPhysical);
+      let drawKey: string | null = targetKey;
+      if (!bitmapCacheRef.current.has(drawKey)) {
+        // JIT decode for the exact playhead frame — jumps the decode queue
+        if (blobCacheRef.current.has(targetKey)) enqueueDecode(targetKey, true);
+        drawKey = findNearestLoadedKey(targetPhysical);
       }
+      if (!drawKey) return;
 
-      if (frameToDraw === -1) return;
-
-      const asset = bitmapCacheRef.current.get(frameToDraw);
+      const asset = bitmapCacheRef.current.get(drawKey);
       if (!asset) return;
 
-      // 60Hz & 120Hz Fillrate Optimization:
-      // If the integer frame to draw has not changed and dimensions have not changed,
-      // skip the full-canvas GPU blit! This eliminates 60-80% of redundant draw calls at 120Hz.
+      // KPI: stale draw = drawn frame more than 2 frames from scroll target
+      if (Math.abs(physOfKey(drawKey) - targetPhysical) > 2) stats.staleDraws++;
+
       const width = windowWidthRef.current || window.innerWidth;
       const height = windowHeightRef.current || window.innerHeight;
 
+      // Skip redundant GPU blits when frame + dimensions unchanged (60Hz & 120Hz win)
       if (
-        frameToDraw === lastDrawnFrameRef.current &&
+        physOfKey(drawKey) === lastDrawnFrameRef.current &&
         width === lastDrawnWidthRef.current &&
         height === lastDrawnHeightRef.current
       ) {
@@ -488,7 +542,6 @@ export default function ScrollytellingEngine({
         canvas.height = targetHeight;
       }
 
-      // Hardware-accelerated 2D context (standard alpha: false, desynchronized for low latency)
       let ctx = ctxRef.current;
       if (!ctx) {
         ctx = canvas.getContext("2d", {
@@ -525,126 +578,189 @@ export default function ScrollytellingEngine({
         offsetX = (width - drawW) / 2;
       }
 
-      // Draw clean, single discrete frame (Zero ghosting, zero teleporting)
       ctx.globalAlpha = 1.0;
       ctx.drawImage(asset, offsetX, offsetY, drawW, drawH);
 
-      lastDrawnFrameRef.current = frameToDraw;
+      stats.drawn++;
+      lastDrawnFrameRef.current = physOfKey(drawKey);
       lastDrawnWidthRef.current = width;
       lastDrawnHeightRef.current = height;
     },
-    [decodeBlobToBitmap, findNearestLoadedFrame]
+    [enqueueDecode, findNearestLoadedKey]
   );
 
-  // Resize handler caching window dimensions and updating adaptive resolution variant
+  // =========================================================================
+  // DIMENSIONS, CACHED MAX-SCROLL & ADAPTIVE VARIANT SWITCH
+  // =========================================================================
+  // maxScroll is recomputed on resize / body-size changes ONLY. The old RAF
+  // loop read document.documentElement.scrollHeight every frame after Lenis
+  // had dirtied scroll — a forced layout/recalc on a 15,144px document.
   useEffect(() => {
-    const updateDimensions = () => {
-      windowWidthRef.current = window.innerWidth;
-      windowHeightRef.current = window.innerHeight;
+    let variantTimer: ReturnType<typeof setTimeout> | null = null;
+    let resizeTimer: ReturnType<typeof setTimeout> | null = null;
 
-      const newVariant = window.innerWidth < 1024 ? "720p" : "1080p";
-      if (assetVariantRef.current !== newVariant) {
-        assetVariantRef.current = newVariant;
-      }
-
-      lastDrawnFrameRef.current = -1; // Force redraw on resize
-      drawFrameToCanvas(currentFrameRef.current);
+    const recomputeMaxScroll = () => {
+      maxScrollRef.current = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
     };
 
-    updateDimensions();
-    window.addEventListener("resize", updateDimensions);
-    return () => window.removeEventListener("resize", updateDimensions);
+    const applyVariantSwitch = (next: "1080p" | "720p") => {
+      const old = assetVariantRef.current;
+      if (old === next) return;
+
+      // Abort old-variant in-flight requests (their .finally owns cleanup)
+      for (const [key, entry] of inflightRef.current) {
+        if (key.startsWith(`${old}:`)) entry.controller.abort();
+      }
+      // Drop old-variant caches (fixes the mixed 720p/1080p playback bug)
+      for (const [key, asset] of bitmapCacheRef.current) {
+        if (key.startsWith(`${old}:`)) {
+          closeAsset(asset);
+          bitmapCacheRef.current.delete(key);
+        }
+      }
+      for (const key of blobCacheRef.current.keys()) {
+        if (key.startsWith(`${old}:`)) blobCacheRef.current.delete(key);
+      }
+      decodeQueueRef.current.length = 0;
+      decodeQueuedRef.current.clear();
+
+      assetVariantRef.current = next;
+      lastDrawnFrameRef.current = -1;
+      lastDrawnWidthRef.current = 0;
+      lastDrawnHeightRef.current = 0;
+
+      requestAnimationFrame(() => {
+        drawFrameToCanvas(currentFrameRef.current);
+        scheduleRef.current?.(currentFrameRef.current, scrollVelocityRef.current);
+        scheduleIdleStreamRef.current();
+      });
+    };
+
+    const onResize = () => {
+      if (resizeTimer) clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        windowWidthRef.current = window.innerWidth;
+        windowHeightRef.current = window.innerHeight;
+        recomputeMaxScroll();
+
+        const next: "1080p" | "720p" = window.innerWidth < 1024 ? "720p" : "1080p";
+        if (next !== assetVariantRef.current) {
+          if (variantTimer) clearTimeout(variantTimer);
+          variantTimer = setTimeout(() => applyVariantSwitch(next), VARIANT_SWITCH_DEBOUNCE_MS);
+        } else if (variantTimer) {
+          clearTimeout(variantTimer);
+          variantTimer = null;
+        }
+
+        lastDrawnFrameRef.current = -1; // force redraw on resize
+        requestAnimationFrame(() => drawFrameToCanvas(currentFrameRef.current));
+      }, RESIZE_DEBOUNCE_MS);
+    };
+
+    windowWidthRef.current = window.innerWidth;
+    windowHeightRef.current = window.innerHeight;
+    recomputeMaxScroll();
+
+    const ro = new ResizeObserver(recomputeMaxScroll);
+    ro.observe(document.body);
+
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      ro.disconnect();
+      if (resizeTimer) clearTimeout(resizeTimer);
+      if (variantTimer) clearTimeout(variantTimer);
+    };
   }, [drawFrameToCanvas]);
 
-
-  // Progressive Bootstrap & Ahead-Of-Time (AOT) Corridor Streamer
+  // =========================================================================
+  // PROGRESSIVE BOOT (unified loader, scroll-locked, right-sized corridor)
+  // =========================================================================
   useEffect(() => {
+    unmountedRef.current = false;
     let isCancelled = false;
-    let loaded = 0;
+    let bootInterval: ReturnType<typeof setInterval> | null = null;
+    let bootTimeout: ReturnType<typeof setTimeout> | null = null;
 
-    const bootEngine = async () => {
-      // Step 1: Critical Bootstrap (Contiguous frames 1 to CRITICAL_PRELOAD_COUNT)
-      const preloadCount = CRITICAL_PRELOAD_COUNT;
-      const initialPromises: Promise<void>[] = [];
+    // Lock native scroll while the splash is up (prevents scrolling into
+    // cold, unloaded regions underneath the loading screen).
+    const lockScroll = () => {
+      document.documentElement.style.overflow = "hidden";
+    };
+    const unlockScroll = () => {
+      document.documentElement.style.overflow = "";
+    };
+    lockScroll();
 
-      for (let i = 1; i <= preloadCount; i++) {
-        const url = getFramePath(i);
-        const p = fetch(url, { cache: "force-cache" })
-          .then((res) => res.blob())
-          .then(async (blob) => {
-            if (!isCancelled) {
-              blobCacheRef.current.set(i, blob);
-              const asset = await decodeBlobToBitmap(i);
-              if (asset && !isCancelled) {
-                bitmapCacheRef.current.set(i, asset);
-              }
-            }
-          })
-          .catch(() => {})
-          .finally(() => {
-            if (!isCancelled) {
-              loaded++;
-              setLoadProgress(Math.min(100, Math.round((loaded / preloadCount) * 100)));
-            }
-          });
-        initialPromises.push(p);
-      }
+    // Dispatch the boot corridor through the unified loader — its concurrency
+    // cap staggers the requests naturally, and everything in flight is
+    // visible to the scheduler (no more duplicate boot fetches).
+    for (let i = 1; i <= CRITICAL_PRELOAD_COUNT; i++) {
+      dispatchFetch(i, "urgent");
+    }
 
-      // Fast-boot timeout: if network is slow, boot after max 2.5s
-      const maxWaitTimeout = new Promise<void>((resolve) => setTimeout(resolve, 2500));
-
-      await Promise.race([
-        Promise.all(initialPromises),
-        maxWaitTimeout,
-      ]);
-
+    const bootDone = () => {
       if (isCancelled) return;
-
+      if (bootInterval) clearInterval(bootInterval);
+      if (bootTimeout) clearTimeout(bootTimeout);
+      bootInterval = null;
+      bootTimeout = null;
       setIsReady(true);
       setLoadProgress(100);
-
-      // Render initial frame immediately
+      unlockScroll();
       drawFrameToCanvas(1);
-
-      // Start priority buffer streaming & begin background idle caching
-      schedulePriorityBuffer(1, 1.0);
+      scheduleRef.current?.(1, 1.0); // start the corridor + idle warm-ahead
       scheduleIdleStreamRef.current();
+      videoRef.current?.play().catch(() => {});
     };
 
-    bootEngine();
+    bootInterval = setInterval(() => {
+      if (isCancelled) return;
+      const variant = assetVariantRef.current;
+      let have = 0;
+      for (let i = 1; i <= CRITICAL_PRELOAD_COUNT; i++) {
+        if (blobCacheRef.current.has(`${variant}:${i}`)) have++;
+      }
+      setLoadProgress(Math.min(100, Math.round((have / CRITICAL_PRELOAD_COUNT) * 100)));
+      if (have >= CRITICAL_PRELOAD_COUNT) bootDone();
+    }, 100);
+
+    // Fast-boot timeout: never hold the splash longer than BOOT_TIMEOUT_MS
+    bootTimeout = setTimeout(bootDone, BOOT_TIMEOUT_MS);
 
     return () => {
       isCancelled = true;
+      if (bootInterval) clearInterval(bootInterval);
+      if (bootTimeout) clearTimeout(bootTimeout);
+      unlockScroll();
       if (idleHandleRef.current !== null) {
         cancelIdle(idleHandleRef.current);
         idleHandleRef.current = null;
       }
-      // Abort any in-flight network requests
-      for (const controller of activeControllersRef.current.values()) {
-        controller.abort();
-      }
-      activeControllersRef.current.clear();
-      // Free GPU ImageBitmaps
-      for (const asset of bitmapCacheRef.current.values()) {
-        if ("close" in asset && typeof asset.close === "function") {
-          asset.close();
-        }
-      }
+      // Abort all in-flight network requests (their .finally owns accounting)
+      for (const entry of inflightRef.current.values()) entry.controller.abort();
+      inflightRef.current.clear();
+      // Free decoded bitmaps + compressed blobs + decode queue
+      for (const asset of bitmapCacheRef.current.values()) closeAsset(asset);
       bitmapCacheRef.current.clear();
       blobCacheRef.current.clear();
+      decodeQueueRef.current.length = 0;
+      decodeQueuedRef.current.clear();
+      unmountedRef.current = true;
     };
-  }, [getFramePath, decodeBlobToBitmap, drawFrameToCanvas, schedulePriorityBuffer]);
+  }, [dispatchFetch, drawFrameToCanvas]);
 
-  // Main Scroll Engine & Synchronized 60FPS/120FPS RAF Loop
+  // =========================================================================
+  // MAIN SCROLL ENGINE (single RAF loop, cached maxScroll, gated style writes)
+  // =========================================================================
   useEffect(() => {
     if (!isReady) return;
 
     const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-    // Responsive Lenis Engine: 0.85s duration for crisp, snappy tactile response
     const lenis = new Lenis({
       duration: prefersReducedMotion ? 0 : 0.85,
-      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)), // Clean exponential easeOut
+      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
       orientation: "vertical",
       gestureOrientation: "vertical",
       smoothWheel: true,
@@ -656,16 +772,34 @@ export default function ScrollytellingEngine({
     lenisRef.current = lenis;
 
     let animFrameId: number;
+    let debugInterval: ReturnType<typeof setInterval> | null = null;
+
+    if (new URLSearchParams(window.location.search).has("debug")) {
+      debugInterval = setInterval(() => {
+        console.log("[frameStats]", {
+          ...stats,
+          urgent: urgentCountRef.current,
+          idle: idleCountRef.current,
+          blobs: blobCacheRef.current.size,
+          bitmaps: bitmapCacheRef.current.size,
+        });
+      }, 5000);
+    }
+
+    const setVar = (container: HTMLElement, name: string, value: string) => {
+      if (lastCssRef.current[name] !== value) {
+        lastCssRef.current[name] = value;
+        container.style.setProperty(name, value);
+      }
+    };
 
     const renderLoop = (time: number) => {
       lenis.raf(time);
 
       const scrollY = lenis.scroll;
-      const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+      const maxScroll = maxScrollRef.current; // cached — no per-frame layout read
       const progress = maxScroll > 0 ? Math.min(1, Math.max(0, scrollY / maxScroll)) : 0;
 
-      // SINGLE-STAGE DIRECT LENIS MAPPING: Zero compound input lag!
-      // Lenis's exponential easeOut curve already provides smooth 60fps/120fps sub-pixel scrolling.
       const renderFloat = 1 + progress * (TOTAL_FRAMES - 1);
       const prevFloat = currentFrameRef.current;
       currentFrameRef.current = renderFloat;
@@ -674,38 +808,54 @@ export default function ScrollytellingEngine({
       const dt = Math.min(0.05, Math.max(0.001, (now - lastTimeRef.current) / 1000));
       lastTimeRef.current = now;
 
-      // Track velocity for directional lookahead
       const velocity = (renderFloat - prevFloat) / dt;
       scrollVelocityRef.current = velocity;
 
-      // Priority linear preloader: runs when integer frame advances or velocity changes
+      // Priority scheduler: run when the integer frame advances or velocity is high
       const currentInt = Math.floor(renderFloat);
       if (currentInt !== lastScheduledIntegerRef.current || Math.abs(velocity) > 3) {
         lastScheduledIntegerRef.current = currentInt;
         schedulePriorityBuffer(renderFloat, velocity);
-      } else if (Math.abs(velocity) < 1.0 && inFlightCountRef.current < 2) {
-        // Trigger idle stream when resting or gliding slowly
+      } else if (Math.abs(velocity) < 1.0 && urgentCountRef.current === 0) {
         scheduleIdleStreamRef.current();
       }
 
-      // Direct DOM Hero Video Crossfade (Zero React Virtual DOM overhead in RAF)
+      // ---- Hero video crossfade (gated writes + true pause when hidden) ----
       const vOpacity = Math.min(1, Math.max(0, 1 - (renderFloat - 1) / 14));
-      if (videoWrapperRef.current) {
-        videoWrapperRef.current.style.opacity = vOpacity.toFixed(3);
-        videoWrapperRef.current.style.display = vOpacity <= 0.005 ? "none" : "block";
+      const vw = videoWrapperRef.current;
+      if (vw) {
+        const o = vOpacity.toFixed(3);
+        if (lastCssRef.current["__video-o"] !== o) {
+          lastCssRef.current["__video-o"] = o;
+          vw.style.opacity = o;
+        }
+        const disp = vOpacity <= 0.005 ? "none" : "block";
+        if (lastCssRef.current["__video-d"] !== disp) {
+          lastCssRef.current["__video-d"] = disp;
+          vw.style.display = disp;
+        }
+      }
+      const vid = videoRef.current;
+      if (vid) {
+        // display:none alone keeps the decoder running forever — actually pause.
+        if (vOpacity <= 0.005 && !videoPausedRef.current) {
+          videoPausedRef.current = true;
+          vid.pause();
+        } else if (vOpacity > 0.005 && videoPausedRef.current) {
+          videoPausedRef.current = false;
+          vid.play().catch(() => {});
+        }
       }
 
-      // Hardware CSS Custom Properties Synchronization (Direct Compositor Updates)
+      // ---- Overlay CSS custom properties (compositor-friendly, gated) ----
       const container = containerRef.current;
       if (container) {
-        // Hero Overlay Transforms (clamped against trackpad bounce/overscroll)
         const heroOpacity = Math.min(1, Math.max(0, 1 - (renderFloat - 1) / 32));
         const heroTY = Math.max(0, (renderFloat - 1) * 2);
-        container.style.setProperty("--hero-opacity", heroOpacity.toFixed(3));
-        container.style.setProperty("--hero-ty", `-${heroTY.toFixed(2)}px`);
-        container.style.setProperty("--hero-vis", heroOpacity <= 0.01 ? "hidden" : "visible");
+        setVar(container, "--hero-opacity", heroOpacity.toFixed(3));
+        setVar(container, "--hero-ty", `-${heroTY.toFixed(2)}px`);
+        setVar(container, "--hero-vis", heroOpacity <= 0.01 ? "hidden" : "visible");
 
-        // Door About Overlay Transforms
         let doorOpacity = 0;
         let doorTY = 0;
         if (renderFloat >= 355 && renderFloat < 368) {
@@ -720,11 +870,10 @@ export default function ScrollytellingEngine({
           doorOpacity = 1 - t;
           doorTY = t * -10;
         }
-        container.style.setProperty("--door-opacity", doorOpacity.toFixed(3));
-        container.style.setProperty("--door-ty", `${doorTY.toFixed(2)}px`);
-        container.style.setProperty("--door-vis", doorOpacity <= 0.005 ? "hidden" : "visible");
+        setVar(container, "--door-opacity", doorOpacity.toFixed(3));
+        setVar(container, "--door-ty", `${doorTY.toFixed(2)}px`);
+        setVar(container, "--door-vis", doorOpacity <= 0.005 ? "hidden" : "visible");
 
-        // Wall Gallery Overlay Continuous Translation
         const startScrollFrame = 648;
         const endFrame = 1262;
         const galleryProgress =
@@ -739,17 +888,16 @@ export default function ScrollytellingEngine({
         } else if (renderFloat >= 618) {
           galleryOpacity = 1;
         }
-        container.style.setProperty("--gallery-tx", `${galleryTX.toFixed(2)}px`);
-        container.style.setProperty("--gallery-opacity", galleryOpacity.toFixed(3));
-        container.style.setProperty("--gallery-vis", galleryOpacity <= 0.005 ? "hidden" : "visible");
-        container.style.setProperty("--gallery-pe", galleryOpacity > 0.1 ? "auto" : "none");
+        setVar(container, "--gallery-tx", `${galleryTX.toFixed(2)}px`);
+        setVar(container, "--gallery-opacity", galleryOpacity.toFixed(3));
+        setVar(container, "--gallery-vis", galleryOpacity <= 0.005 ? "hidden" : "visible");
+        setVar(container, "--gallery-pe", galleryOpacity > 0.1 ? "auto" : "none");
       }
 
-      // Canvas Render Update: Draw discrete frame (skips redundant GPU blits on 60Hz & 120Hz)
+      // ---- Canvas render ----
       drawFrameToCanvas(renderFloat);
 
-      // Section boundary throttle: ONLY trigger React state update when crossing a major section milestone!
-      // Eliminates 100% of React Virtual DOM reconciliations during active scrolling!
+      // ---- Section boundary throttle (only cross-boundary React updates) ----
       const roundedFrame = Math.round(renderFloat);
       const isBoundaryCrossed =
         (lastReportedFrameRef.current !== 1 && roundedFrame <= 1) ||
@@ -784,6 +932,7 @@ export default function ScrollytellingEngine({
 
     return () => {
       cancelAnimationFrame(animFrameId);
+      if (debugInterval) clearInterval(debugInterval);
       lenis.destroy();
       lenisRef.current = null;
     };
@@ -804,8 +953,7 @@ export default function ScrollytellingEngine({
     if (targetNavigationFrame !== null && targetNavigationFrame !== undefined && lenisRef.current) {
       const target = Math.min(TOTAL_FRAMES, Math.max(1, targetNavigationFrame));
       const targetProgress = (target - 1) / (TOTAL_FRAMES - 1);
-      const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
-      const targetScrollY = targetProgress * maxScroll;
+      const targetScrollY = targetProgress * maxScrollRef.current;
 
       schedulePriorityBuffer(target, 1.0);
 
@@ -826,19 +974,11 @@ export default function ScrollytellingEngine({
     }
   }, [targetNavigationFrame, schedulePriorityBuffer, onNavigationComplete, onFrameUpdate]);
 
-  // Autoplay video loop for Safari compatibility
-  useEffect(() => {
-    if (videoRef.current) {
-      videoRef.current.play().catch(() => {});
-    }
-  }, []);
-
   const handleExploreEvents = useCallback(() => {
     if (lenisRef.current) {
       const targetProgress = (630 - 1) / (TOTAL_FRAMES - 1);
-      const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
       schedulePriorityBuffer(630, 1.0);
-      lenisRef.current.scrollTo(targetProgress * maxScroll, { duration: 1.2 });
+      lenisRef.current.scrollTo(targetProgress * maxScrollRef.current, { duration: 1.2 });
     }
   }, [schedulePriorityBuffer]);
 
@@ -864,7 +1004,8 @@ export default function ScrollytellingEngine({
           className="absolute inset-0 w-full h-full object-cover z-0"
         />
 
-        {/* Ambient Video (Loops seamlessly at hero frame 1, controlled via direct DOM ref) */}
+        {/* Ambient Video (poster paints instantly; playback starts once the
+            boot corridor is ready; paused the moment it fades out) */}
         <div
           ref={videoWrapperRef}
           className="absolute inset-0 w-full h-full pointer-events-none z-10"
@@ -873,11 +1014,11 @@ export default function ScrollytellingEngine({
           <video
             ref={videoRef}
             src={getAssetUrl("/still_shot.mp4")}
-            autoPlay
+            poster={getFrameUrl(1, "720p")}
             loop
             muted
             playsInline
-            preload="auto"
+            preload="metadata"
             className="w-full h-full object-cover"
           />
         </div>

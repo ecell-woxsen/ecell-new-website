@@ -90,8 +90,12 @@ async function uploadFile(task: FileUploadTask, retries = 3): Promise<boolean> {
       const s3File = s3.file(task.r2Key);
       await s3File.write(buffer, {
         type: task.mimeType,
-        headers: {
-          "Cache-Control": "public, max-age=31536000, immutable",
+        // NOTE: `httpMetadata` is what persists Cache-Control onto the R2 object.
+        // The previous `headers:` option never landed on objects (verified: live
+        // responses had no Cache-Control), so browsers only heuristic-cached frames.
+        httpMetadata: {
+          contentType: task.mimeType,
+          cacheControl: "public, max-age=31536000, immutable",
         },
       });
       return true;

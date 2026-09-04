@@ -26,6 +26,9 @@ html, body {
   font-size: 16px;
   line-height: 1.6;
   overscroll-behavior-y: none;
+  /* Reserve the scrollbar gutter so the boot-time scroll lock doesn't cause
+     a layout width jump (notable on Windows/Linux scrollbar setups). */
+  scrollbar-gutter: stable;
 }
 
 /* Lenis smooth scrolling core styles */

@@ -1,0 +1,20 @@
+name = "ecell-assets-cdn"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+
+# Serves the existing R2 bucket (filled by ../scripts/upload-to-r2.ts) as a
+# production-grade asset CDN on https://<name>.<account-subdomain>.workers.dev
+# - HTTP/2+ (no pub-*.r2.dev HTTP/1.1 6-connection cap)
+# - Edge caching via the Cache API (pub-*.r2.dev has none)
+# - No r2.dev rate limits
+# - Immutable browser caching + CORS + Range support (mp4 seeking)
+#
+# One-time setup:  npx wrangler login
+# Deploy:          npx wrangler deploy
+# Then update NEXT_PUBLIC_R2_PUBLIC_URL and R2_PUBLIC_URL in ../.env to
+#   https://ecell-assets-cdn.<your-subdomain>.workers.dev
+# and redeploy the site (the deploy command prints the exact URL).
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "ecell-main-website"

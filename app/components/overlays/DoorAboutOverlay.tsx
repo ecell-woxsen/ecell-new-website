@@ -102,7 +102,6 @@ function DoorAboutOverlay({}: DoorAboutOverlayProps) {
               width={320}
               height={320}
               className="w-full h-full object-contain drop-shadow-[0_8px_32px_rgba(0,0,0,0.95)]"
-              priority
             />
           </div>
         </div>
