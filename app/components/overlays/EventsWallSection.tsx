@@ -1,8 +1,9 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import Image from "next/image";
 import { getAssetUrl } from "../../lib/assets";
+import { loadEventsPack, getCachedEventUrl } from "../../lib/eventsPack";
 
 interface EventsWallSectionProps {
   currentFrame?: number;
@@ -48,6 +49,20 @@ const EVENTS_DATA = [
 export default function EventsWallSection({
   currentFrame = 630,
 }: EventsWallSectionProps) {
+  const [packUrls, setPackUrls] = useState<Record<string, string>>(() => {
+    const initial: Record<string, string> = {};
+    for (const item of EVENTS_DATA) {
+      const cached = getCachedEventUrl(item.image);
+      if (cached) initial[item.image] = cached;
+    }
+    return initial;
+  });
+
+  useEffect(() => {
+    loadEventsPack().then((urls) => {
+      setPackUrls((prev) => ({ ...prev, ...urls }));
+    });
+  }, []);
   return (
     <div className="flex items-center gap-24 sm:gap-36 md:gap-52 lg:gap-72 shrink-0">
       {EVENTS_DATA.map((event, index) => {
@@ -121,9 +136,10 @@ export default function EventsWallSection({
               className="relative z-10 w-full max-w-[540px] lg:max-w-[620px] aspect-[16/9.5] rounded-xl sm:rounded-2xl overflow-hidden border border-white/15 shadow-[0_20px_45px_rgba(0,0,0,0.85)] group transition-all duration-500 hover:border-emerald-400/40"
             >
               <Image
-                src={getAssetUrl(event.image)}
+                src={packUrls[event.image] || getAssetUrl(event.image)}
                 alt={event.alt}
                 fill
+                unoptimized={Boolean(packUrls[event.image])}
                 className="object-cover transition-transform duration-700 ease-out group-hover:scale-[1.02]"
                 sizes="(max-width: 768px) 85vw, 620px"
               />

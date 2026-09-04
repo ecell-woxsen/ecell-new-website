@@ -16,6 +16,7 @@ import {
   getPackFrameRange,
   getPackUrl,
 } from "../lib/assets";
+import { loadEventsPack } from "../lib/eventsPack";
 
 interface ScrollytellingEngineProps {
   onFrameUpdate?: (frame: number) => void;
@@ -767,6 +768,11 @@ export default function ScrollytellingEngine({
         }
         for (const pIdx of packOrder) dispatchPackFetch(pIdx, "urgent");
       }
+
+      // Pre-warm the single events pack well before reaching the gallery (frame 598)
+      if (centerVirtual > 300) {
+        loadEventsPack().catch(() => {});
+      }
     },
     [dispatchFetch, dispatchPackFetch, enqueueDecode]
   );
@@ -779,6 +785,9 @@ export default function ScrollytellingEngine({
   const scheduleIdleStream = useCallback(() => {
     if (idleHandleRef.current !== null) return;
     if (urgentCountRef.current > 0 || urgentPackCountRef.current > 0) return;
+
+    // Pre-warm the events pack quietly during idle periods
+    loadEventsPack().catch(() => {});
 
     const variant = assetVariantRef.current;
     let blobCount = 0;

@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "pack:frames": "bun run scripts/pack-frames.ts",
+    "pack:events": "bun run scripts/pack-events.ts",
     "upload:r2": "bun run scripts/upload-to-r2.ts"
   },
   "dependencies": {
