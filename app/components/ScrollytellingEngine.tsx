@@ -15,6 +15,7 @@ import {
   getPackIndex,
   getPackFrameRange,
   getPackUrl,
+  type AssetVariant,
 } from "../lib/assets";
 import { loadEventsPack } from "../lib/eventsPack";
 import { loadTeamPack } from "../lib/teamPack";
@@ -89,6 +90,13 @@ const ENDPOINT_BACKOFF_MAX_MS = 60_000;
 
 const VARIANT_SWITCH_DEBOUNCE_MS = 300;
 const RESIZE_DEBOUNCE_MS = 150;
+
+const resolveDeviceVariant = (): AssetVariant => {
+  if (typeof window === "undefined") return "1080p";
+  if (window.innerWidth < 768) return "mobile_720p";
+  if (window.innerWidth < 1024) return "720p";
+  return "1080p";
+};
 
 // Image asset type: ImageBitmap (decoded off-main-thread) or HTMLImageElement fallback
 type FrameAsset = ImageBitmap | HTMLImageElement;
@@ -251,10 +259,15 @@ function ScrollytellingEngine({
     }
   }, []);
 
-  // Adaptive Resolution: "720p" for mobile/tablet (<1024px), "1080p" for desktop
-  const assetVariantRef = useRef<"1080p" | "720p">(
-    typeof window !== "undefined" && window.innerWidth < 1024 ? "720p" : "1080p"
-  );
+  // Adaptive Resolution: "mobile_720p" (<768px), "720p" tablet (768-1023px), "1080p" desktop (>=1024px)
+  const assetVariantRef = useRef<AssetVariant>(resolveDeviceVariant());
+
+  // Sync video poster to client-detected resolution without triggering cascading renders or hydration mismatch
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.poster = getFrameUrl(1, resolveDeviceVariant());
+    }
+  }, []);
 
   // =========================================================================
   // UNIFIED FRAME LOADER
@@ -978,7 +991,7 @@ function ScrollytellingEngine({
       maxScrollRef.current = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
     };
 
-    const applyVariantSwitch = (next: "1080p" | "720p") => {
+    const applyVariantSwitch = (next: AssetVariant) => {
       const old = assetVariantRef.current;
       if (old === next) return;
 
@@ -1026,7 +1039,7 @@ function ScrollytellingEngine({
         windowHeightRef.current = window.innerHeight;
         recomputeMaxScroll();
 
-        const next: "1080p" | "720p" = window.innerWidth < 1024 ? "720p" : "1080p";
+        const next: AssetVariant = resolveDeviceVariant();
         if (next !== assetVariantRef.current) {
           if (variantTimer) clearTimeout(variantTimer);
           variantTimer = setTimeout(() => applyVariantSwitch(next), VARIANT_SWITCH_DEBOUNCE_MS);
@@ -1425,7 +1438,8 @@ function ScrollytellingEngine({
           <video
             ref={videoRef}
             src={getAssetUrl("/still_shot.mp4")}
-            poster={getFrameUrl(1, "720p")}
+            poster={getFrameUrl(1, "1080p")}
+            suppressHydrationWarning
             loop
             muted
             playsInline

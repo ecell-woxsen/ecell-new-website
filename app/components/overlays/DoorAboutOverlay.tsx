@@ -15,7 +15,7 @@ function DoorAboutOverlay({}: DoorAboutOverlayProps) {
       className="fixed inset-0 z-30 flex items-center justify-center p-6 sm:p-10 lg:p-14 pointer-events-none select-none"
       style={{
         opacity: "var(--door-opacity, 0)",
-        visibility: "var(--door-vis, hidden)" as any,
+        visibility: "var(--door-vis, hidden)" as React.CSSProperties["visibility"],
       }}
     >
       {/* ========================================================================= */}

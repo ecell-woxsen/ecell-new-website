@@ -46,6 +46,15 @@ const nextConfig: NextConfig = {
         ],
       },
       {
+        source: "/ecell_shots_mobile_720p/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
+      {
         source: "/events/:path*",
         headers: [
           {

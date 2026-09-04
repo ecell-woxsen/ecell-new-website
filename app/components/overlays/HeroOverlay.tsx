@@ -23,7 +23,7 @@ function HeroOverlay({
       style={{
         opacity: "var(--hero-opacity, 1)",
         transform: "translate3d(0, var(--hero-ty, 0px), 0)",
-        visibility: "var(--hero-vis, visible)" as any,
+        visibility: "var(--hero-vis, visible)" as React.CSSProperties["visibility"],
       }}
     >
       <div className="relative z-10 max-w-[880px] mx-auto flex flex-col items-center text-center px-4 pointer-events-auto">

@@ -8,6 +8,7 @@ const TOTAL_PACKS = Math.ceil(TOTAL_PHYSICAL_FRAMES / FRAMES_PER_PACK); // 53
 const VARIANTS = [
   { name: "1080p", sourceDir: "public/ecell_shots", targetDir: "public/ecell_packs/1080p" },
   { name: "720p", sourceDir: "public/ecell_shots_720p", targetDir: "public/ecell_packs/720p" },
+  { name: "mobile_720p", sourceDir: "public/ecell_shots_mobile_720p", targetDir: "public/ecell_packs/mobile_720p" },
 ] as const;
 
 async function packVariant(variant: (typeof VARIANTS)[number]) {
@@ -109,7 +110,17 @@ async function packVariant(variant: (typeof VARIANTS)[number]) {
 async function main() {
   console.log("🚀 Starting Frame Batch Pack Generation...");
   const startTime = Date.now();
-  for (const variant of VARIANTS) {
+  const filterArgs = process.argv.slice(2).filter((a) => !a.startsWith("--"));
+  const targetVariants = filterArgs.length > 0
+    ? VARIANTS.filter((v) => filterArgs.includes(v.name))
+    : VARIANTS;
+
+  if (targetVariants.length === 0) {
+    console.warn(`⚠️ No variants matched filter: [${filterArgs.join(", ")}]. Available: ${VARIANTS.map((v) => v.name).join(", ")}`);
+    return;
+  }
+
+  for (const variant of targetVariants) {
     await packVariant(variant);
   }
   const duration = ((Date.now() - startTime) / 1000).toFixed(2);

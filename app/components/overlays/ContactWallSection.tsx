@@ -188,7 +188,7 @@ export default function ContactWallSection({
           {/* Form Header Eyebrow */}
           <div className="flex items-center gap-2 h-6 mb-5">
             <span className="font-mono text-[11px] sm:text-xs font-semibold tracking-[0.22em] uppercase text-emerald-400 drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
-              // DIRECT INQUIRY
+              {"// DIRECT INQUIRY"}
             </span>
           </div>
 

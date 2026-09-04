@@ -100,9 +100,10 @@ async function uploadFile(task: FileUploadTask, retries = 3): Promise<boolean> {
         },
       });
       return true;
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (attempt === retries) {
-        console.error(`\n❌ Failed to upload ${task.r2Key} after ${retries} attempts: ${err.message}`);
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`\n❌ Failed to upload ${task.r2Key} after ${retries} attempts: ${message}`);
         return false;
       }
       await new Promise((resolve) => setTimeout(resolve, 300 * attempt));
@@ -188,8 +189,11 @@ async function main() {
       "team/imad.webp",
       "ecell_packs/1080p/pack_000.bin",
       "ecell_packs/720p/pack_000.bin",
+      "ecell_packs/mobile_720p/pack_000.bin",
       "ecell_shots/00001.webp",
       "ecell_shots/00840.webp",
+      "ecell_shots_mobile_720p/00001.webp",
+      "ecell_shots_mobile_720p/00840.webp",
     ];
 
     for (const key of sampleKeys) {
@@ -199,8 +203,9 @@ async function main() {
         const contentType = res.headers.get("content-type");
         const cacheControl = res.headers.get("cache-control");
         console.log(`  ✓ [HTTP ${res.status}] ${key} -> Type: ${contentType}, Cache: ${cacheControl || "none"}`);
-      } catch (e: any) {
-        console.error(`  ✗ Error probing ${testUrl}: ${e.message}`);
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : String(e);
+        console.error(`  ✗ Error probing ${testUrl}: ${message}`);
       }
     }
   }

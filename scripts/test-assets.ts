@@ -16,7 +16,7 @@ if (fs.existsSync(envPath)) {
   }
 }
 
-import { getAssetUrl, getFrameUrl, R2_PUBLIC_BASE_URL } from "../app/lib/assets";
+import { getAssetUrl, getFrameUrl, getPackUrl, R2_PUBLIC_BASE_URL } from "../app/lib/assets";
 
 console.log("==========================================");
 console.log("🧪 R2 Asset Loader Integration Verification");
@@ -29,6 +29,12 @@ const testCases = [
   { name: "Scrollytelling Frame 630 (Events)", url: getFrameUrl(630) },
   { name: "Scrollytelling Frame 1262 (Final)", url: getFrameUrl(1262) },
   { name: "Scrollytelling 720p Frame 1", url: getFrameUrl(1, "720p") },
+  { name: "Scrollytelling Mobile Frame 1", url: getFrameUrl(1, "mobile_720p") },
+  { name: "Scrollytelling Mobile Frame 18", url: getFrameUrl(18, "mobile_720p") },
+  { name: "Scrollytelling Mobile Frame 630", url: getFrameUrl(630, "mobile_720p") },
+  { name: "Scrollytelling Mobile Frame 840", url: getFrameUrl(840, "mobile_720p") },
+  { name: "Scrollytelling Mobile Pack 0", url: getPackUrl(0, "mobile_720p") },
+  { name: "Scrollytelling Mobile Pack 52", url: getPackUrl(52, "mobile_720p") },
   { name: "Official E-Cell Logo", url: getAssetUrl("/ecell-logo.png") },
   { name: "Ambient Video Loop", url: getAssetUrl("/still_shot.mp4") },
   { name: "Event Image (Hult)", url: getAssetUrl("/events/hult.png") },
@@ -53,8 +59,9 @@ for (const test of testCases) {
       console.error(`❌ [HTTP ${status}] ${test.name} FAILED! URL: ${test.url}`);
       allPassed = false;
     }
-  } catch (err: any) {
-    console.error(`❌ [Network Error] ${test.name}: ${err.message}`);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`❌ [Network Error] ${test.name}: ${message}`);
     allPassed = false;
   }
 }

@@ -81,6 +81,20 @@ export default function RootLayout({
         <link
           rel="preload"
           as="image"
+          href={getAssetUrl("/ecell_shots_mobile_720p/00001.webp")}
+          fetchPriority="high"
+          media="(max-width: 767px)"
+        />
+        <link
+          rel="preload"
+          as="image"
+          href={getAssetUrl("/ecell_shots_720p/00001.webp")}
+          fetchPriority="high"
+          media="(min-width: 768px) and (max-width: 1023px)"
+        />
+        <link
+          rel="preload"
+          as="image"
           href={getAssetUrl("/ecell_shots/00001.webp")}
           fetchPriority="high"
           media="(min-width: 1024px)"

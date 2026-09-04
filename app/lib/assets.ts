@@ -51,21 +51,28 @@ export function getPhysicalFrameNumber(virtualFrame: number): number {
   return WALL_LOOP_START + (offset % WALL_LOOP_LENGTH);
 }
 
+export type AssetVariant = "1080p" | "720p" | "mobile_720p";
+
 /**
  * Returns the full CDN URL for a specific scrollytelling frame number.
  * Virtual frames > 840 automatically resolve to their physical loop frame (625–840).
  *
  * @param frameNum - 1-indexed virtual frame integer (1 to 1262)
- * @param variant - Resolution variant ("1080p" -> "ecell_shots", "720p" -> "ecell_shots_720p")
+ * @param variant - Resolution variant ("1080p", "720p", "mobile_720p")
  * @returns Fully qualified frame URL (e.g. "https://pub-...r2.dev/ecell_shots/00001.webp")
  */
 export function getFrameUrl(
   frameNum: number,
-  variant: "1080p" | "720p" = "1080p"
+  variant: AssetVariant = "1080p"
 ): string {
   const physicalFrame = getPhysicalFrameNumber(frameNum);
   const padded = String(physicalFrame).padStart(5, "0");
-  const folder = variant === "720p" ? "ecell_shots_720p" : "ecell_shots";
+  const folder =
+    variant === "mobile_720p"
+      ? "ecell_shots_mobile_720p"
+      : variant === "720p"
+      ? "ecell_shots_720p"
+      : "ecell_shots";
   return getAssetUrl(`/${folder}/${padded}.webp`);
 }
 
@@ -97,7 +104,7 @@ export function getPackFrameRange(packIndex: number): { start: number; end: numb
  */
 export function getPackUrl(
   packIndex: number,
-  variant: "1080p" | "720p" = "1080p"
+  variant: AssetVariant = "1080p"
 ): string {
   const padded = String(packIndex).padStart(3, "0");
   return getAssetUrl(`/ecell_packs/${variant}/pack_${padded}.bin`);

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import EventsWallSection from "./EventsWallSection";
 import TeamWallSection from "./TeamWallSection";
 import ContactWallSection from "./ContactWallSection";
@@ -16,13 +16,10 @@ function WallGalleryOverlay({
   onOpenJoinModal,
   onTrackWidthChange,
 }: WallGalleryOverlayProps) {
-  const [renderScale, setRenderScale] = useState(1);
   const trackRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const updateScaleAndWidth = () => {
-      const scale = Math.min(1.2, Math.max(0.8, window.innerWidth / 1280));
-      setRenderScale(scale);
       if (trackRef.current) {
         const totalWidth = trackRef.current.scrollWidth;
         const viewWidth = window.innerWidth;
@@ -118,7 +115,7 @@ function WallGalleryOverlay({
       className="fixed inset-0 z-30 flex items-center overflow-hidden pointer-events-none"
       style={{
         opacity: "var(--gallery-opacity, 0)",
-        visibility: "var(--gallery-vis, hidden)" as any,
+        visibility: "var(--gallery-vis, hidden)" as React.CSSProperties["visibility"],
       }}
     >
       {/* Physically Wall-Anchored Gallery Track */}
@@ -127,7 +124,7 @@ function WallGalleryOverlay({
         className="flex items-center gap-16 sm:gap-24 md:gap-36 lg:gap-44 pl-10 sm:pl-20 md:pl-32 pr-32 py-12 will-change-transform"
         style={{
           transform: "translate3d(var(--gallery-tx, 0px), 0, 0)",
-          pointerEvents: "var(--gallery-pe, none)" as any,
+          pointerEvents: "var(--gallery-pe, none)" as React.CSSProperties["pointerEvents"],
         }}
       >
         {/* Section 1: Flagship Initiatives & Events (3 Sequential Chapters with Studio Spotlight) */}
