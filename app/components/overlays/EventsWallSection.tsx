@@ -46,9 +46,7 @@ const EVENTS_DATA = [
   },
 ];
 
-export default function EventsWallSection({
-  currentFrame = 630,
-}: EventsWallSectionProps) {
+export default function EventsWallSection({}: EventsWallSectionProps) {
   const [packUrls, setPackUrls] = useState<Record<string, string>>(() => {
     const initial: Record<string, string> = {};
     for (const item of EVENTS_DATA) {
@@ -63,62 +61,39 @@ export default function EventsWallSection({
       setPackUrls((prev) => ({ ...prev, ...urls }));
     });
   }, []);
+
   return (
     <div className="flex items-center gap-24 sm:gap-36 md:gap-52 lg:gap-72 shrink-0">
       {EVENTS_DATA.map((event, index) => {
-        // Calculate focal distance to highlight active event
-        let dist = Math.abs(currentFrame - event.targetFrame);
-        // During the initial dwell window (up to frame 650), keep event 01 perfectly centered/active
-        if (index === 0 && currentFrame <= 650) {
-          dist = 0;
-        }
-
-        const isActive = dist < 55;
-        const opacity = isActive
-          ? 1
-          : Math.max(0.42, 1 - (dist - 55) / 90);
-        const scale = isActive ? 1 : 0.97;
-        const spotlightOpacity = isActive
-          ? 1
-          : Math.max(0.25, 1 - (dist - 55) / 80);
-
         return (
           <div
             key={event.number}
-            className="relative shrink-0 flex flex-col items-start justify-center w-[85vw] sm:w-[500px] md:w-[560px] lg:w-[620px] select-none will-change-transform transition-all duration-300 ease-out"
-            style={{
-              opacity,
-              transform: `scale(${scale})`,
-            }}
+            data-active={index === 0 ? "true" : "false"}
+            className="gallery-event-card relative shrink-0 flex flex-col items-start justify-center w-[85vw] sm:w-[500px] md:w-[560px] lg:w-[620px] select-none will-change-transform"
           >
-            {/* ========================================================================= */}
-            {/* INVISIBLE CINEMATIC AMBIENT ILLUMINATION                                  */}
-            {/* Seamless, ultra-diffused light falloff: zero visible circles or bubbles   */}
-            {/* ========================================================================= */}
+            {/* INVISIBLE CINEMATIC AMBIENT ILLUMINATION */}
             <div
               className="absolute -top-28 -left-28 w-[900px] h-[750px] pointer-events-none blur-3xl rounded-full transition-opacity duration-500"
               style={{
-                opacity: spotlightOpacity * 0.5,
+                opacity: 0.25,
                 background: `radial-gradient(ellipse at 40% 35%, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 40%, transparent 75%)`,
               }}
               aria-hidden="true"
             />
 
-            {/* ========================================================================= */}
-            {/* TYPOGRAPHY INTEGRATED INTO THE WALL                                       */}
-            {/* ========================================================================= */}
+            {/* TYPOGRAPHY INTEGRATED INTO THE WALL */}
             <div className="relative z-10 text-left mb-4 sm:mb-5 max-w-[540px]">
               {/* Level 1: Refined Editorial Index Label */}
               <div className="flex items-center gap-2.5 h-5 mb-2.5 sm:mb-3">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.7)]" />
-                <span className="font-mono text-[10px] sm:text-[11px] font-semibold tracking-[0.22em] uppercase text-emerald-400 drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
+                <span className="event-card-dot w-1.5 h-1.5 rounded-full bg-emerald-400/50 transition-all duration-300" />
+                <span className="event-card-label font-mono text-[10px] sm:text-[11px] font-semibold tracking-[0.22em] uppercase text-emerald-400/70 transition-colors duration-300">
                   {event.label}
                 </span>
                 <span className="h-px w-6 bg-white/20" />
               </div>
 
               {/* Level 2: Scaled Editorial Title */}
-              <h3 className="font-display text-4xl sm:text-5xl lg:text-6xl xl:text-[66px] text-slate-50 tracking-[-0.01em] uppercase leading-[0.92] mb-3 sm:mb-4 drop-shadow-[0_4px_20px_rgba(0,0,0,0.98)]">
+              <h3 className="event-card-title font-display text-4xl sm:text-5xl lg:text-6xl xl:text-[66px] tracking-[-0.01em] uppercase leading-[0.92] mb-3 sm:mb-4 text-slate-200/80 drop-shadow-[0_4px_20px_rgba(0,0,0,0.98)] transition-colors duration-300">
                 {event.title}
               </h3>
 
@@ -128,19 +103,14 @@ export default function EventsWallSection({
               </p>
             </div>
 
-            {/* ========================================================================= */}
-            {/* LEVEL 4: MOUNTED EDITORIAL EXHIBITION PHOTOGRAPH                          */}
-            {/* Proportional exhibition print with breathing room and subtle depth        */}
-            {/* ========================================================================= */}
-            <div
-              className="relative z-10 w-full max-w-[540px] lg:max-w-[620px] aspect-[16/9.5] rounded-xl sm:rounded-2xl overflow-hidden border border-white/15 shadow-[0_20px_45px_rgba(0,0,0,0.85)] group transition-all duration-500 hover:border-emerald-400/40"
-            >
+            {/* LEVEL 4: MOUNTED EDITORIAL EXHIBITION PHOTOGRAPH */}
+            <div className="event-card-image relative z-10 w-full max-w-[540px] lg:max-w-[620px] aspect-[16/9.5] rounded-xl sm:rounded-2xl overflow-hidden border border-white/15 bg-[#0a0f16] shadow-[0_20px_45px_rgba(0,0,0,0.85)] group transition-all duration-500">
               <Image
                 src={packUrls[event.image] || getAssetUrl(event.image)}
                 alt={event.alt}
                 fill
                 unoptimized={Boolean(packUrls[event.image])}
-                className="object-cover transition-transform duration-700 ease-out group-hover:scale-[1.02]"
+                className="event-card-img object-cover transition-all duration-700 ease-out group-hover:scale-[1.02] grayscale-[15%]"
                 sizes="(max-width: 768px) 85vw, 620px"
               />
               {/* Atmospheric lighting gradient */}

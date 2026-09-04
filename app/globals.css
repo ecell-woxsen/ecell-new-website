@@ -153,3 +153,122 @@ h1, h2, h3, h4, h5, h6, .font-heading {
     0 0 30px rgba(52, 211, 153, 0.15),
     inset 0 1px 0 rgba(255, 255, 255, 0.25);
 }
+
+/* ========================================================================= */
+/* WALL GALLERY: DYNAMIC CENTER-CARD ACTIVE STATES                           */
+/* Center card is 100% fully opaque (opacity: 1), non-center cards are translucent */
+/* ========================================================================= */
+
+.gallery-event-card {
+  opacity: 0.35;
+  transform: scale(0.97);
+  transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1), transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.gallery-event-card[data-active="true"] {
+  opacity: 1 !important;
+  transform: scale(1) !important;
+}
+
+.gallery-event-card[data-active="true"] .event-card-image {
+  border-color: rgba(52, 211, 153, 0.6) !important;
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.92), 0 0 32px rgba(52, 211, 153, 0.22) !important;
+}
+
+.gallery-event-card[data-active="true"] .event-card-dot {
+  background-color: rgb(52, 211, 153) !important;
+  box-shadow: 0 0 10px rgba(52, 211, 153, 0.9) !important;
+}
+
+.gallery-event-card[data-active="true"] .event-card-label {
+  color: rgb(52, 211, 153) !important;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.95)) !important;
+}
+
+.gallery-event-card[data-active="true"] .event-card-title {
+  color: #ffffff !important;
+}
+
+.gallery-event-card[data-active="true"] .event-card-img {
+  filter: grayscale(0%) !important;
+}
+
+/* Team Section Dynamic Items */
+.gallery-team-hero {
+  opacity: 0.42;
+  transform: scale(0.97);
+  transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1), transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.gallery-team-hero[data-active="true"] {
+  opacity: 1 !important;
+  transform: scale(1) !important;
+}
+
+.gallery-team-hero[data-active="true"] .team-hero-dot {
+  background-color: rgb(52, 211, 153) !important;
+  box-shadow: 0 0 10px rgba(52, 211, 153, 0.9) !important;
+}
+
+.gallery-team-hero[data-active="true"] .team-hero-label {
+  color: rgb(52, 211, 153) !important;
+}
+
+.gallery-team-hero[data-active="true"] .team-hero-name {
+  color: #f8fafc !important;
+}
+
+.gallery-team-hero[data-active="true"] .team-hero-role {
+  color: rgb(52, 211, 153) !important;
+}
+
+.gallery-team-hero[data-active="true"] .team-portrait-surface {
+  border-color: rgba(52, 211, 153, 0.45) !important;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.92), 0 0 28px rgba(52, 211, 153, 0.16) !important;
+}
+
+.gallery-team-hero[data-active="true"] .team-monogram {
+  color: rgba(110, 231, 183, 0.9) !important;
+  opacity: 0.98 !important;
+  transform: scale(1.05) !important;
+}
+
+.gallery-team-col {
+  opacity: 0.38;
+  transform: scale(0.97);
+  transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1), transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.gallery-team-col[data-active="true"] {
+  opacity: 1 !important;
+  transform: scale(1) !important;
+}
+
+.gallery-team-col[data-active="true"] .team-col-dot {
+  background-color: rgb(52, 211, 153) !important;
+  box-shadow: 0 0 10px rgba(52, 211, 153, 0.9) !important;
+}
+
+.gallery-team-col[data-active="true"] .team-col-label {
+  color: rgb(52, 211, 153) !important;
+}
+
+.gallery-team-col[data-active="true"] .team-col-name {
+  color: #f8fafc !important;
+}
+
+.gallery-team-col[data-active="true"] .team-col-role {
+  color: rgb(52, 211, 153) !important;
+}
+
+.gallery-team-col[data-active="true"] .team-portrait-surface {
+  border-color: rgba(52, 211, 153, 0.45) !important;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.92), 0 0 28px rgba(52, 211, 153, 0.16) !important;
+}
+
+.gallery-team-col[data-active="true"] .team-monogram {
+  color: rgba(110, 231, 183, 0.9) !important;
+  opacity: 0.98 !important;
+  transform: scale(1.05) !important;
+}
+

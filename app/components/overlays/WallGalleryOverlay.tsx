@@ -38,6 +38,81 @@ function WallGalleryOverlay({
     return () => window.removeEventListener("resize", updateScaleAndWidth);
   }, [onTrackWidthChange]);
 
+  // Real-time, 60/120fps synchronous center-card focus detector
+  // Ensures whichever card or column is at the center of the viewport is strictly 100% opaque
+  useEffect(() => {
+    let rafId: number;
+
+    const updateActiveCards = () => {
+      const track = trackRef.current;
+      if (!track) {
+        rafId = requestAnimationFrame(updateActiveCards);
+        return;
+      }
+
+      const screenCenter = window.innerWidth / 2;
+
+      // 1. Events Section: Find closest event card to screen center
+      const eventCards = track.querySelectorAll<HTMLElement>(".gallery-event-card");
+      if (eventCards.length > 0) {
+        let closestEvent: HTMLElement | null = null;
+        let minEventDist = Infinity;
+
+        eventCards.forEach((card) => {
+          const rect = card.getBoundingClientRect();
+          const center = rect.left + rect.width / 2;
+          const dist = Math.abs(center - screenCenter);
+          if (dist < minEventDist) {
+            minEventDist = dist;
+            closestEvent = card;
+          }
+        });
+
+        eventCards.forEach((card) => {
+          const isActive = card === closestEvent;
+          const cur = card.getAttribute("data-active");
+          if (isActive && cur !== "true") {
+            card.setAttribute("data-active", "true");
+          } else if (!isActive && cur !== "false") {
+            card.setAttribute("data-active", "false");
+          }
+        });
+      }
+
+      // 2. Team Section: Find closest team column or hero to screen center
+      const teamItems = track.querySelectorAll<HTMLElement>(".gallery-team-item");
+      if (teamItems.length > 0) {
+        let closestTeam: HTMLElement | null = null;
+        let minTeamDist = Infinity;
+
+        teamItems.forEach((item) => {
+          const rect = item.getBoundingClientRect();
+          const center = rect.left + rect.width / 2;
+          const dist = Math.abs(center - screenCenter);
+          if (dist < minTeamDist) {
+            minTeamDist = dist;
+            closestTeam = item;
+          }
+        });
+
+        teamItems.forEach((item) => {
+          const isActive = item === closestTeam;
+          const cur = item.getAttribute("data-active");
+          if (isActive && cur !== "true") {
+            item.setAttribute("data-active", "true");
+          } else if (!isActive && cur !== "false") {
+            item.setAttribute("data-active", "false");
+          }
+        });
+      }
+
+      rafId = requestAnimationFrame(updateActiveCards);
+    };
+
+    rafId = requestAnimationFrame(updateActiveCards);
+    return () => cancelAnimationFrame(rafId);
+  }, []);
+
   return (
     <div
       className="fixed inset-0 z-30 flex items-center overflow-hidden pointer-events-none"

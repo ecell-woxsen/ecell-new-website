@@ -160,7 +160,7 @@ const decodeAsset = (blob: Blob): Promise<FrameAsset | null> => {
   return decodeViaImageElement(blob);
 };
 
-export default function ScrollytellingEngine({
+function ScrollytellingEngine({
   onFrameUpdate,
   onOpenJoinModal,
   targetNavigationFrame,
@@ -1308,7 +1308,20 @@ export default function ScrollytellingEngine({
         (lastReportedFrameRef.current < 1140 && roundedFrame >= 1140) ||
         (lastReportedFrameRef.current >= 1140 && roundedFrame < 1140);
 
-      if (isBoundaryCrossed) {
+      // Section tracking for Header navigation highlights
+      const prevSection =
+        lastReportedFrameRef.current >= 1140 ? 4 :
+        lastReportedFrameRef.current >= 840 ? 3 :
+        lastReportedFrameRef.current >= 598 ? 2 :
+        lastReportedFrameRef.current >= 365 && lastReportedFrameRef.current < 450 ? 1 : 0;
+      const nextSection =
+        roundedFrame >= 1140 ? 4 :
+        roundedFrame >= 840 ? 3 :
+        roundedFrame >= 598 ? 2 :
+        roundedFrame >= 365 && roundedFrame < 450 ? 1 : 0;
+      const isSectionChanged = prevSection !== nextSection;
+
+      if (isBoundaryCrossed || isSectionChanged) {
         const reportedFrame = roundedFrame <= 1 ? 1 : roundedFrame;
         lastReportedFrameRef.current = reportedFrame;
         setCurrentFrame(reportedFrame);
@@ -1443,3 +1456,5 @@ export default function ScrollytellingEngine({
     </>
   );
 }
+
+export default React.memo(ScrollytellingEngine);

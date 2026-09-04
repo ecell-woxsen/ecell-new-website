@@ -173,17 +173,17 @@ function EditorialPortraitSurface({
 }) {
   return (
     <div
-      className={`relative overflow-hidden rounded-2xl border border-white/15 shadow-[0_25px_60px_rgba(0,0,0,0.9)] bg-gradient-to-b from-[#181d26] via-[#0f131a] to-[#080b10] flex items-center justify-center select-none group-hover:border-emerald-400/40 transition-all duration-700 ${className}`}
+      className={`team-portrait-surface relative overflow-hidden rounded-2xl border border-white/15 shadow-[0_25px_60px_rgba(0,0,0,0.9)] bg-gradient-to-b from-[#181d26] via-[#0f131a] to-[#080b10] flex items-center justify-center select-none group-hover:border-emerald-400/40 transition-all duration-500 ${className}`}
     >
       {/* Studio Softbox Keylight from Top-Left */}
-      <div className="absolute -top-16 -left-16 w-56 h-56 bg-white/[0.07] rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute -top-16 -left-16 w-56 h-56 rounded-full blur-3xl pointer-events-none bg-white/[0.06] transition-opacity duration-500" />
 
       {/* Subtle Warm Fill Light from Bottom */}
-      <div className="absolute -bottom-10 -right-10 w-48 h-48 bg-emerald-500/[0.04] rounded-full blur-2xl pointer-events-none" />
+      <div className="absolute -bottom-10 -right-10 w-48 h-48 rounded-full blur-2xl pointer-events-none bg-emerald-500/[0.04] transition-opacity duration-500" />
 
-      {/* Minimalist Editorial Monogram Silhouette (Placeholder awaiting final photograph) */}
-      <div className="relative z-10 flex flex-col items-center justify-center p-6 text-center opacity-75 group-hover:opacity-95 transition-opacity">
-        <span className="font-display text-3xl sm:text-4xl text-slate-100/40 tracking-wider uppercase group-hover:text-emerald-300/60 transition-colors drop-shadow-md">
+      {/* Minimalist Editorial Monogram Silhouette */}
+      <div className="relative z-10 flex flex-col items-center justify-center p-6 text-center transition-all duration-500">
+        <span className="team-monogram font-display text-3xl sm:text-4xl tracking-wider uppercase text-slate-100/40 group-hover:text-emerald-300/60 transition-all drop-shadow-md">
           {name.charAt(0)}
         </span>
       </div>
@@ -194,22 +194,12 @@ function EditorialPortraitSurface({
   );
 }
 
-export default function TeamWallSection({
-  currentFrame = 940,
-}: {
+export default function TeamWallSection({}: {
   currentFrame?: number;
 }) {
-  // Hero Leadership proximity calculation (Always at least 68% visible)
-  const heroDist = Math.abs((currentFrame || 880) - 880);
-  const heroIsActive = heroDist < 60;
-  const heroOpacity = heroIsActive ? 1 : Math.max(0.70, 1 - (heroDist - 60) / 300);
-
   return (
     <div className="relative flex items-center gap-16 sm:gap-24 md:gap-32 lg:gap-40 shrink-0 select-none">
-      {/* ========================================================================= */}
-      {/* INVISIBLE APPLE STUDIO SOFTBOX ILLUMINATION                               */}
-      {/* Expansive, seamless ambient exposure lift with zero visible circles/bubbles*/}
-      {/* ========================================================================= */}
+      {/* INVISIBLE APPLE STUDIO SOFTBOX ILLUMINATION */}
       <div
         className="absolute -top-40 left-0 right-0 h-[900px] pointer-events-none blur-3xl rounded-full"
         style={{
@@ -218,9 +208,7 @@ export default function TeamWallSection({
         aria-hidden="true"
       />
 
-      {/* ========================================================================= */}
-      {/* CHAPTER OPENING: DRAMATIC EXHIBITION TITLE WALL                            */}
-      {/* ========================================================================= */}
+      {/* CHAPTER OPENING: DRAMATIC EXHIBITION TITLE WALL */}
       <div className="relative shrink-0 flex flex-col justify-between w-[300px] sm:w-[360px] md:w-[420px] h-[520px] sm:h-[580px] lg:h-[620px] pr-8 sm:pr-12">
         <div>
           {/* Level 1: Monospace Indexing */}
@@ -256,35 +244,30 @@ export default function TeamWallSection({
         </div>
       </div>
 
-      {/* ========================================================================= */}
-      {/* HERO DUO: PRESIDENT & VICE PRESIDENT (Asymmetric Editorial Spread)         */}
-      {/* ========================================================================= */}
+      {/* HERO DUO: PRESIDENT & VICE PRESIDENT */}
       <div
-        className="relative shrink-0 flex items-end gap-10 sm:gap-14 lg:gap-18 transition-all duration-300 ease-out"
-        style={{ opacity: heroOpacity }}
+        className="gallery-team-item gallery-team-hero relative shrink-0 flex items-end gap-10 sm:gap-14 lg:gap-18 will-change-transform"
+        data-active="true"
       >
         {/* President: Dominant Hero Portrait */}
         <div className="relative shrink-0 flex flex-col justify-end w-[280px] sm:w-[340px] lg:w-[400px] group">
-          {/* Monospace Role Marker */}
           <div className="flex items-center gap-2 h-5 mb-3">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-            <span className="font-mono text-[10px] sm:text-[11px] font-semibold tracking-[0.2em] uppercase text-emerald-400 drop-shadow-[0_2px_4px_rgba(0,0,0,0.95)]">
+            <span className="team-hero-dot w-1.5 h-1.5 rounded-full bg-emerald-400/50 transition-all duration-300" />
+            <span className="team-hero-label font-mono text-[10px] sm:text-[11px] font-semibold tracking-[0.2em] uppercase text-emerald-400/70 transition-colors duration-300">
               EXECUTIVE // PRESIDENT
             </span>
           </div>
 
-          {/* Monumental Hero Portrait */}
           <EditorialPortraitSurface
             name="Mohnish Singh Patwal"
             className="w-full h-[400px] sm:h-[460px] lg:h-[520px]"
           />
 
-          {/* Museum Exhibition Caption (+10-15% Text Scale & High Contrast) */}
           <div className="mt-4 text-left">
-            <h3 className="font-display text-2xl sm:text-3xl lg:text-[32px] text-slate-50 uppercase tracking-tight leading-tight group-hover:text-emerald-300 transition-colors drop-shadow-[0_3px_12px_rgba(0,0,0,0.98)]">
+            <h3 className="team-hero-name font-display text-2xl sm:text-3xl lg:text-[32px] uppercase tracking-tight leading-tight text-slate-300/80 group-hover:text-emerald-300 transition-colors drop-shadow-[0_3px_12px_rgba(0,0,0,0.98)]">
               Mohnish Singh Patwal
             </h3>
-            <p className="font-mono text-[13px] sm:text-[14px] lg:text-[15px] text-slate-300/90 font-normal tracking-wide mt-1.5 drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)]">
+            <p className="team-hero-role font-mono text-[13px] sm:text-[14px] lg:text-[15px] font-normal tracking-wide mt-1.5 text-slate-400 drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)] transition-colors">
               President & Strategic Lead
             </p>
           </div>
@@ -292,59 +275,41 @@ export default function TeamWallSection({
 
         {/* Vice President: Asymmetric Complementary Hero */}
         <div className="relative shrink-0 flex flex-col justify-end w-[260px] sm:w-[310px] lg:w-[360px] group mb-3 sm:mb-5">
-          {/* Monospace Role Marker */}
           <div className="flex items-center gap-2 h-5 mb-3">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-            <span className="font-mono text-[10px] sm:text-[11px] font-semibold tracking-[0.2em] uppercase text-emerald-400 drop-shadow-[0_2px_4px_rgba(0,0,0,0.95)]">
+            <span className="team-hero-dot w-1.5 h-1.5 rounded-full bg-emerald-400/50 transition-all duration-300" />
+            <span className="team-hero-label font-mono text-[10px] sm:text-[11px] font-semibold tracking-[0.2em] uppercase text-emerald-400/70 transition-colors duration-300">
               EXECUTIVE // VICE PRESIDENT
             </span>
           </div>
 
-          {/* Complementary Hero Portrait */}
           <EditorialPortraitSurface
             name="Shreyas Kandi"
             className="w-full h-[370px] sm:h-[420px] lg:h-[470px]"
           />
 
-          {/* Museum Exhibition Caption (+10-15% Text Scale & High Contrast) */}
           <div className="mt-4 text-left">
-            <h3 className="font-display text-xl sm:text-2xl lg:text-[26px] text-slate-50 uppercase tracking-tight leading-tight group-hover:text-emerald-300 transition-colors drop-shadow-[0_3px_12px_rgba(0,0,0,0.98)]">
+            <h3 className="team-hero-name font-display text-xl sm:text-2xl lg:text-[26px] uppercase tracking-tight leading-tight text-slate-300/80 group-hover:text-emerald-300 transition-colors drop-shadow-[0_3px_12px_rgba(0,0,0,0.98)]">
               Shreyas Kandi
             </h3>
-            <p className="font-mono text-[13px] sm:text-[14px] lg:text-[15px] text-slate-300/90 font-normal tracking-wide mt-1.5 drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)]">
+            <p className="team-hero-role font-mono text-[13px] sm:text-[14px] lg:text-[15px] font-normal tracking-wide mt-1.5 text-slate-400 drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)] transition-colors">
               Vice President & Operations
             </p>
           </div>
         </div>
       </div>
 
-      {/* ========================================================================= */}
-      {/* GALLERY CONTACT SHEET: FUNCTIONAL DEPARTMENTS & ADVISORS                  */}
-      {/* ========================================================================= */}
+      {/* GALLERY CONTACT SHEET: FUNCTIONAL DEPARTMENTS & ADVISORS */}
       {TEAM_DATA.filter((grp) => grp.category === "contact-sheet").map((grp) => {
-        // Continuous, subtle cinematic visibility falloff (never drops below 68%)
-        const dist = Math.abs((currentFrame || 940) - grp.targetFrame);
-        const isActive = dist < 50;
-        const opacity = isActive
-          ? 1
-          : dist < 120
-          ? Math.max(0.78, 1 - (dist - 50) / 320)
-          : Math.max(0.68, 1 - (dist - 50) / 450);
-        const scale = isActive ? 1 : 0.985;
-
         return (
           <div
             key={grp.id}
-            className="relative shrink-0 flex flex-col justify-end w-[185px] sm:w-[215px] lg:w-[245px] h-[520px] sm:h-[580px] lg:h-[620px] will-change-transform transition-all duration-300 ease-out"
-            style={{
-              opacity,
-              transform: `scale(${scale})`,
-            }}
+            data-active="false"
+            className="gallery-team-item gallery-team-col relative shrink-0 flex flex-col justify-end w-[185px] sm:w-[215px] lg:w-[245px] h-[520px] sm:h-[580px] lg:h-[620px] will-change-transform"
           >
             {/* Department Index Header */}
             <div className="flex items-center gap-2 h-5 mb-3">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400/80" />
-              <span className="font-mono text-[10.5px] sm:text-[11.5px] font-semibold tracking-[0.2em] uppercase text-emerald-400 drop-shadow-[0_2px_4px_rgba(0,0,0,0.95)] truncate">
+              <span className="team-col-dot w-1.5 h-1.5 rounded-full bg-emerald-400/50 transition-all duration-300" />
+              <span className="team-col-label font-mono text-[10.5px] sm:text-[11.5px] font-semibold tracking-[0.2em] uppercase text-emerald-400/60 transition-colors duration-300 truncate">
                 // {grp.label}
               </span>
             </div>
@@ -359,12 +324,12 @@ export default function TeamWallSection({
                     className="w-full aspect-square"
                   />
 
-                  {/* Museum Caption (+10-15% Text Scale & High Contrast) */}
+                  {/* Museum Caption */}
                   <div className="mt-2.5">
-                    <h4 className="font-display text-[17px] sm:text-[18px] lg:text-[20px] text-slate-50 uppercase tracking-tight leading-snug group-hover:text-emerald-300 transition-colors drop-shadow-[0_2px_8px_rgba(0,0,0,0.98)] truncate">
+                    <h4 className="team-col-name font-display text-[17px] sm:text-[18px] lg:text-[20px] uppercase tracking-tight leading-snug text-slate-300/80 group-hover:text-emerald-300 transition-colors drop-shadow-[0_2px_8px_rgba(0,0,0,0.98)] truncate">
                       {member.name}
                     </h4>
-                    <p className="font-mono text-[11px] sm:text-[12px] lg:text-[13px] text-slate-300/85 tracking-tight mt-0.5 drop-shadow-[0_2px_6px_rgba(0,0,0,0.95)] truncate">
+                    <p className="team-col-role font-mono text-[11px] sm:text-[12px] lg:text-[13px] tracking-tight mt-0.5 text-slate-400 drop-shadow-[0_2px_6px_rgba(0,0,0,0.95)] truncate transition-colors">
                       {member.role}
                     </p>
                   </div>
