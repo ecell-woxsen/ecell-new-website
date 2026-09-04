@@ -68,3 +68,38 @@ export function getFrameUrl(
   const folder = variant === "720p" ? "ecell_shots_720p" : "ecell_shots";
   return getAssetUrl(`/${folder}/${padded}.webp`);
 }
+
+// ---------------------------------------------------------------------------
+// FRAME PACK BATCHING (Track B: 16 frames per binary pack)
+// ---------------------------------------------------------------------------
+export const FRAMES_PER_PACK = 16;
+export const TOTAL_PACKS = Math.ceil(TOTAL_PHYSICAL_FRAMES / FRAMES_PER_PACK); // 53
+
+/**
+ * Returns the 0-indexed pack number (0 to 52) for a given physical frame (1 to 840).
+ */
+export function getPackIndex(physicalFrame: number): number {
+  const clamped = Math.max(1, Math.min(TOTAL_PHYSICAL_FRAMES, physicalFrame));
+  return Math.floor((clamped - 1) / FRAMES_PER_PACK);
+}
+
+/**
+ * Returns physical frame range [start, end] and count for a 0-indexed pack.
+ */
+export function getPackFrameRange(packIndex: number): { start: number; end: number; count: number } {
+  const start = packIndex * FRAMES_PER_PACK + 1;
+  const end = Math.min(TOTAL_PHYSICAL_FRAMES, (packIndex + 1) * FRAMES_PER_PACK);
+  return { start, end, count: Math.max(0, end - start + 1) };
+}
+
+/**
+ * Returns full CDN or local URL for a binary frame pack.
+ */
+export function getPackUrl(
+  packIndex: number,
+  variant: "1080p" | "720p" = "1080p"
+): string {
+  const padded = String(packIndex).padStart(3, "0");
+  return getAssetUrl(`/ecell_packs/${variant}/pack_${padded}.bin`);
+}
+

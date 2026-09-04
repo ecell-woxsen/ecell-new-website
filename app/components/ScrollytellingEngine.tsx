@@ -6,7 +6,16 @@ import PreloadManager from "./PreloadManager";
 import HeroOverlay from "./overlays/HeroOverlay";
 import DoorAboutOverlay from "./overlays/DoorAboutOverlay";
 import WallGalleryOverlay from "./overlays/WallGalleryOverlay";
-import { getAssetUrl, getFrameUrl, getPhysicalFrameNumber, TOTAL_PHYSICAL_FRAMES } from "../lib/assets";
+import {
+  getAssetUrl,
+  getFrameUrl,
+  getPhysicalFrameNumber,
+  TOTAL_PHYSICAL_FRAMES,
+  TOTAL_PACKS,
+  getPackIndex,
+  getPackFrameRange,
+  getPackUrl,
+} from "../lib/assets";
 
 interface ScrollytellingEngineProps {
   onFrameUpdate?: (frame: number) => void;
@@ -32,6 +41,9 @@ const BOOT_TIMEOUT_MS = 2500;
 // 6 connections without breaking anything.
 const MAX_URGENT_CONCURRENT = 8;
 const MAX_IDLE_CONCURRENT = 2; // idle streamer runs only when zero urgent requests exist
+const MAX_URGENT_PACK_CONCURRENT = 3;
+const MAX_IDLE_PACK_CONCURRENT = 1;
+
 
 // Coarse-first corridor: fetch stride anchors (t, +/-4, +/-8, +/-16, +/-32)
 // before filling the gaps, so a cold fling or nav jump always lands within
@@ -58,6 +70,21 @@ const KEEP_FORWARD = 24;
 const RETRY_LIMIT = 3;
 const RETRY_BASE_DELAY_MS = 400;
 
+// Failure isolation (defense in depth — whatever the CDN does):
+//  - a frame that exhausts its retries is blocked with an escalating cooldown,
+//    so a single bad frame can never loop the pipeline again
+//  - a blob whose decode repeatedly fails is blocked (kills the infinite
+//    JIT re-decode loop on corrupt bytes)
+//  - many distinct-key failures in a row pause the whole endpoint with
+//    doubling backoff instead of a fetch storm
+const FETCH_FAILURE_COOLDOWN_MS = 30_000;
+const FETCH_FAILURE_COOLDOWN_MAX_MS = 120_000;
+const DECODE_FAILURE_LIMIT = 2;
+const DECODE_FAILURE_COOLDOWN_MS = 60_000;
+const ENDPOINT_FAILURE_THRESHOLD = 15;
+const ENDPOINT_BACKOFF_MIN_MS = 5_000;
+const ENDPOINT_BACKOFF_MAX_MS = 60_000;
+
 const VARIANT_SWITCH_DEBOUNCE_MS = 300;
 const RESIZE_DEBOUNCE_MS = 150;
 
@@ -78,8 +105,12 @@ const stats = {
   drawn: 0,
   staleDraws: 0,
   netRequests: 0,
+  packRequests: 0,
   dedupedHits: 0,
   netErrors: 0,
+  fetchFailures: 0,
+  decodeFailures: 0,
+  endpointPauses: 0,
   decodes: 0,
   decodeDrops: 0,
 };
@@ -162,6 +193,11 @@ export default function ScrollytellingEngine({
   const idleCountRef = useRef(0);
   const unmountedRef = useRef(false);
 
+  // Failure isolation state
+  const blockedKeysRef = useRef<Map<string, { until: number; count: number }>>(new Map());
+  const badDecodeRef = useRef<Map<string, number>>(new Map());
+  const endpointGuardRef = useRef({ pausedUntil: 0, backoffMs: ENDPOINT_BACKOFF_MIN_MS, consecutive: 0 });
+
   // Decode pipeline state (bounded concurrency + FIFO queue with jump slots)
   const decodeInflightRef = useRef<Set<string>>(new Set());
   const decodeQueueRef = useRef<string[]>([]);
@@ -195,7 +231,23 @@ export default function ScrollytellingEngine({
 
   // Change-gated style write cache (skip identical setProperty calls per frame)
   const lastCssRef = useRef<Record<string, string>>({});
-  const videoPausedRef = useRef(false);
+  const videoPermanentlyStoppedRef = useRef(false);
+
+  // Pack batching state (Track B)
+  const noPacksRef = useRef(false);
+  const packInflightRef = useRef<
+    Map<string, { controller: AbortController; priority: "urgent" | "idle"; packIndex: number }>
+  >(new Map());
+  const urgentPackCountRef = useRef(0);
+  const idlePackCountRef = useRef(0);
+  const blockedPacksRef = useRef<Map<string, { until: number; count: number }>>(new Map());
+
+  // Check ?nopacks A/B testing flag
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      noPacksRef.current = new URLSearchParams(window.location.search).has("nopacks");
+    }
+  }, []);
 
   // Adaptive Resolution: "720p" for mobile/tablet (<1024px), "1080p" for desktop
   const assetVariantRef = useRef<"1080p" | "720p">(
@@ -212,11 +264,48 @@ export default function ScrollytellingEngine({
   //  - retries transient failures with exponential backoff
   //  - single ownership of counter/map cleanup in .finally (fixes count drift)
   // Returns true only when a new network request was actually started.
-  const dispatchFetch = useCallback((physical: number, priority: "urgent" | "idle"): boolean => {
+  // Circuit-breaker bookkeeping for a frame whose fetch retries exhausted.
+  const markFetchFailure = useCallback((key: string) => {
+    const now = Date.now();
+    const guard = endpointGuardRef.current;
+
+    // Endpoint-level guard: many distinct-key failures in a row -> pause all
+    // dispatch with doubling backoff instead of hammering a broken endpoint.
+    guard.consecutive++;
+    if (guard.consecutive >= ENDPOINT_FAILURE_THRESHOLD) {
+      guard.pausedUntil = now + guard.backoffMs;
+      guard.backoffMs = Math.min(ENDPOINT_BACKOFF_MAX_MS, guard.backoffMs * 2);
+      guard.consecutive = 0;
+      stats.endpointPauses++;
+    }
+
+    // Per-key breaker: escalating cooldown (30s -> 60s -> 120s cap)
+    const prev = blockedKeysRef.current.get(key);
+    const count = (prev?.count ?? 0) + 1;
+    const cooldown = Math.min(
+      FETCH_FAILURE_COOLDOWN_MAX_MS,
+      FETCH_FAILURE_COOLDOWN_MS * Math.pow(2, count - 1)
+    );
+    blockedKeysRef.current.set(key, { until: now + cooldown, count });
+  }, []);
+
+  const dispatchFetch = useCallback(
+    (physical: number, priority: "urgent" | "idle"): boolean => {
     const variant = assetVariantRef.current;
     const key = `${variant}:${physical}`;
 
     if (blobCacheRef.current.has(key)) return false; // already downloaded
+
+    // Endpoint guard: while paused, start nothing (cached frames still render)
+    const now = Date.now();
+    if (now < endpointGuardRef.current.pausedUntil) return false;
+
+    // Per-key breaker: skip cooling frames; allow exactly one probe after expiry
+    const blocked = blockedKeysRef.current.get(key);
+    if (blocked) {
+      if (now < blocked.until) return false;
+      blockedKeysRef.current.delete(key);
+    }
 
     const existing = inflightRef.current.get(key);
     if (existing) {
@@ -258,28 +347,45 @@ export default function ScrollytellingEngine({
     const attempt = (triesLeft: number): Promise<void> =>
       fetch(url, { signal: controller.signal, cache: "force-cache" })
         .then(async (res) => {
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          // Status whitelist: only 200 (full) and 206 (valid partial) are
+          // acceptable — anything else (3xx surprises, 4xx, 5xx, protocol
+          // garbage) is a failure and feeds the circuit breaker.
+          if (res.status !== 200 && res.status !== 206) {
+            throw new Error(`HTTP ${res.status}`);
+          }
           return res.blob();
         })
         .then((blob) => {
           if (assetVariantRef.current === variant) {
             blobCacheRef.current.set(key, blob);
+            // Any success resets the endpoint guard entirely
+            endpointGuardRef.current.consecutive = 0;
+            endpointGuardRef.current.backoffMs = ENDPOINT_BACKOFF_MIN_MS;
+            endpointGuardRef.current.pausedUntil = 0;
           }
         })
         .catch(async (err) => {
           if (err && err.name === "AbortError") return;
           stats.netErrors++;
-          if (
+          stats.fetchFailures++;
+          const retryable =
             triesLeft > 0 &&
             !controller.signal.aborted &&
-            assetVariantRef.current === variant
-          ) {
+            assetVariantRef.current === variant &&
+            Date.now() >= endpointGuardRef.current.pausedUntil;
+          if (retryable) {
             await new Promise<void>((r) =>
               setTimeout(r, RETRY_BASE_DELAY_MS * Math.pow(2, RETRY_LIMIT - triesLeft))
             );
             if (!controller.signal.aborted && assetVariantRef.current === variant) {
               return attempt(triesLeft - 1);
             }
+          }
+          // Retries exhausted (or non-retryable) -> trip the breakers.
+          // Without this, a permanently-failing frame was re-dispatched by
+          // every scheduler kick forever (fetch storm).
+          if (!controller.signal.aborted && assetVariantRef.current === variant) {
+            markFetchFailure(key);
           }
         });
 
@@ -299,7 +405,9 @@ export default function ScrollytellingEngine({
     });
 
     return true;
-  }, []);
+    },
+    [markFetchFailure]
+  );
 
   // =========================================================================
   // DECODE PIPELINE (bounded concurrency, stale-drop, JIT jump slots)
@@ -348,6 +456,16 @@ export default function ScrollytellingEngine({
           } else {
             closeAsset(asset); // component unmounted — release immediately
           }
+        } else {
+          // Decode failed (corrupt bytes). Memoize it — without this, the
+          // playhead JIT re-enqueue would spin on the same bad blob forever.
+          stats.decodeFailures++;
+          const fails = (badDecodeRef.current.get(key) ?? 0) + 1;
+          badDecodeRef.current.set(key, fails);
+          if (fails >= DECODE_FAILURE_LIMIT) {
+            blockedKeysRef.current.set(key, { until: Date.now() + DECODE_FAILURE_COOLDOWN_MS, count: 1 });
+            badDecodeRef.current.delete(key);
+          }
         }
         if (!unmountedRef.current) pumpDecodeQueueRef.current();
       });
@@ -362,6 +480,9 @@ export default function ScrollytellingEngine({
     (key: string, jumpQueue = false) => {
       if (decodeInflightRef.current.has(key) || decodeQueuedRef.current.has(key)) return;
       if (!blobCacheRef.current.has(key) || bitmapCacheRef.current.has(key)) return;
+      // Skip keys blocked by the breaker (repeated decode failures)
+      const blocked = blockedKeysRef.current.get(key);
+      if (blocked && Date.now() < blocked.until) return;
       decodeQueuedRef.current.add(key);
       if (jumpQueue) decodeQueueRef.current.unshift(key);
       else decodeQueueRef.current.push(key);
@@ -394,6 +515,183 @@ export default function ScrollytellingEngine({
     }
     return bestKey;
   }, []);
+
+  // =========================================================================
+  // PACK BATCHING LOADER (Track B: 16 frames / pack binary fetch layer)
+  // =========================================================================
+  const markPackFetchFailure = useCallback((key: string) => {
+    const now = Date.now();
+    const guard = endpointGuardRef.current;
+
+    guard.consecutive++;
+    if (guard.consecutive >= ENDPOINT_FAILURE_THRESHOLD) {
+      guard.pausedUntil = now + guard.backoffMs;
+      guard.backoffMs = Math.min(ENDPOINT_BACKOFF_MAX_MS, guard.backoffMs * 2);
+      guard.consecutive = 0;
+      stats.endpointPauses++;
+    }
+
+    const prev = blockedPacksRef.current.get(key);
+    const count = (prev?.count ?? 0) + 1;
+    const cooldown = Math.min(
+      FETCH_FAILURE_COOLDOWN_MAX_MS,
+      FETCH_FAILURE_COOLDOWN_MS * Math.pow(2, count - 1)
+    );
+    blockedPacksRef.current.set(key, { until: now + cooldown, count });
+  }, []);
+
+  const dispatchPackFetch = useCallback(
+    (packIndex: number, priority: "urgent" | "idle"): boolean => {
+      const variant = assetVariantRef.current;
+      const key = `${variant}:pack:${packIndex}`;
+      const { start, end } = getPackFrameRange(packIndex);
+
+      let hasMissing = false;
+      for (let f = start; f <= end; f++) {
+        if (!blobCacheRef.current.has(`${variant}:${f}`)) {
+          hasMissing = true;
+          break;
+        }
+      }
+      if (!hasMissing) return false;
+
+      const now = Date.now();
+      if (now < endpointGuardRef.current.pausedUntil) return false;
+
+      const blocked = blockedPacksRef.current.get(key);
+      if (blocked) {
+        if (now < blocked.until) {
+          // Direct per-frame fetch fallback: ensure single bad pack cannot create 16 holes
+          for (let f = start; f <= end; f++) {
+            if (!blobCacheRef.current.has(`${variant}:${f}`)) {
+              dispatchFetch(f, priority);
+            }
+          }
+          return false;
+        }
+        blockedPacksRef.current.delete(key);
+      }
+
+      const existing = packInflightRef.current.get(key);
+      if (existing) {
+        if (priority === "urgent" && existing.priority === "idle") {
+          existing.controller.abort();
+        } else {
+          stats.dedupedHits++;
+          return false;
+        }
+      }
+
+      if (priority === "urgent") {
+        if (urgentPackCountRef.current >= MAX_URGENT_PACK_CONCURRENT) {
+          return false;
+        }
+      } else {
+        if (
+          urgentCountRef.current > 0 ||
+          urgentPackCountRef.current > 0 ||
+          idlePackCountRef.current >= MAX_IDLE_PACK_CONCURRENT
+        ) {
+          return false;
+        }
+      }
+
+      const controller = new AbortController();
+      packInflightRef.current.set(key, { controller, priority, packIndex });
+      if (priority === "urgent") urgentPackCountRef.current++;
+      else idlePackCountRef.current++;
+      stats.netRequests++;
+      stats.packRequests++;
+
+      const url = getPackUrl(packIndex, variant);
+
+      const attempt = (triesLeft: number): Promise<void> =>
+        fetch(url, { signal: controller.signal, cache: "force-cache" })
+          .then(async (res) => {
+            if (res.status !== 200 && res.status !== 206) {
+              throw new Error(`HTTP ${res.status}`);
+            }
+            return res.arrayBuffer();
+          })
+          .then((buffer) => {
+            if (assetVariantRef.current !== variant) return;
+
+            const view = new DataView(buffer);
+            const count = view.getUint32(0, true);
+            let offset = 4 + count * 4;
+
+            for (let i = 0; i < count; i++) {
+              const len = view.getUint32(4 + i * 4, true);
+              const phys = start + i;
+              const frameKey = `${variant}:${phys}`;
+
+              if (!blobCacheRef.current.has(frameKey)) {
+                const frameBlob = new Blob([new Uint8Array(buffer, offset, len)], {
+                  type: "image/webp",
+                });
+                blobCacheRef.current.set(frameKey, frameBlob);
+              }
+              offset += len;
+            }
+
+            endpointGuardRef.current.consecutive = 0;
+            endpointGuardRef.current.backoffMs = ENDPOINT_BACKOFF_MIN_MS;
+            endpointGuardRef.current.pausedUntil = 0;
+
+            const curPhys = getPhysicalFrameNumber(currentFrameRef.current);
+            for (let f = start; f <= end; f++) {
+              if (Math.abs(f - curPhys) <= DECODE_FORWARD) {
+                enqueueDecode(`${variant}:${f}`);
+              }
+            }
+          })
+          .catch(async (err) => {
+            if (err && err.name === "AbortError") return;
+            stats.netErrors++;
+            stats.fetchFailures++;
+            const retryable =
+              triesLeft > 0 &&
+              !controller.signal.aborted &&
+              assetVariantRef.current === variant &&
+              Date.now() >= endpointGuardRef.current.pausedUntil;
+
+            if (retryable) {
+              await new Promise<void>((r) =>
+                setTimeout(r, RETRY_BASE_DELAY_MS * Math.pow(2, RETRY_LIMIT - triesLeft))
+              );
+              if (!controller.signal.aborted && assetVariantRef.current === variant) {
+                return attempt(triesLeft - 1);
+              }
+            }
+
+            if (!controller.signal.aborted && assetVariantRef.current === variant) {
+              markPackFetchFailure(key);
+              // Fallback to direct per-frame fetches so a single failing pack doesn't leave 16 holes
+              for (let f = start; f <= end; f++) {
+                if (!blobCacheRef.current.has(`${variant}:${f}`)) {
+                  dispatchFetch(f, priority);
+                }
+              }
+            }
+          });
+
+      attempt(RETRY_LIMIT).finally(() => {
+        if (priority === "urgent") urgentPackCountRef.current = Math.max(0, urgentPackCountRef.current - 1);
+        else idlePackCountRef.current = Math.max(0, idlePackCountRef.current - 1);
+
+        const entry = packInflightRef.current.get(key);
+        if (entry && entry.controller === controller) packInflightRef.current.delete(key);
+
+        if (!unmountedRef.current) {
+          scheduleRef.current?.(currentFrameRef.current, scrollVelocityRef.current);
+          scheduleIdleStreamRef.current();
+        }
+      });
+
+      return true;
+    },
+    [dispatchFetch, enqueueDecode, markPackFetchFailure]
+  );
 
   // =========================================================================
   // PLAYHEAD-FIRST PRIORITY SCHEDULER (coarse-first corridor)
@@ -447,19 +745,40 @@ export default function ScrollytellingEngine({
       const backLook = isForward ? LOOKAHEAD_BACKWARD : LOOKAHEAD_FORWARD;
       for (let i = 1; i <= backLook; i++) pushVirtual(centerVirtual - i * dir); // dense fill behind
 
-      for (const p of order) dispatchFetch(p, "urgent");
+      if (noPacksRef.current) {
+        for (const p of order) dispatchFetch(p, "urgent");
+      } else {
+        const packOrder: number[] = [];
+        const seenPacks = new Set<number>();
+        for (const p of order) {
+          const pIdx = getPackIndex(p);
+          if (!seenPacks.has(pIdx)) {
+            seenPacks.add(pIdx);
+            const { start, end } = getPackFrameRange(pIdx);
+            let needed = false;
+            for (let f = start; f <= end; f++) {
+              if (!blobCacheRef.current.has(`${variant}:${f}`)) {
+                needed = true;
+                break;
+              }
+            }
+            if (needed) packOrder.push(pIdx);
+          }
+        }
+        for (const pIdx of packOrder) dispatchPackFetch(pIdx, "urgent");
+      }
     },
-    [dispatchFetch, enqueueDecode]
+    [dispatchFetch, dispatchPackFetch, enqueueDecode]
   );
 
   // =========================================================================
   // BACKGROUND IDLE STREAMER
   // =========================================================================
   // Quietly downloads the remaining compressed WebP blobs into RAM when the
-  // user is idle (urgent pipeline empty, no active fling) — 2 at a time.
+  // user is idle (urgent pipeline empty, no active fling).
   const scheduleIdleStream = useCallback(() => {
     if (idleHandleRef.current !== null) return;
-    if (urgentCountRef.current > 0) return;
+    if (urgentCountRef.current > 0 || urgentPackCountRef.current > 0) return;
 
     const variant = assetVariantRef.current;
     let blobCount = 0;
@@ -470,23 +789,53 @@ export default function ScrollytellingEngine({
 
     idleHandleRef.current = requestIdle(() => {
       idleHandleRef.current = null;
-      if (urgentCountRef.current > 0 || Math.abs(scrollVelocityRef.current) > 2) return;
+      if (
+        urgentCountRef.current > 0 ||
+        urgentPackCountRef.current > 0 ||
+        Math.abs(scrollVelocityRef.current) > 2
+      ) {
+        return;
+      }
 
       const curPhys = getPhysicalFrameNumber(currentFrameRef.current);
       let dispatched = 0;
 
-      // Forward corridor from playhead first, then backward to the beginning
-      for (let f = curPhys; f <= TOTAL_PHYSICAL_FRAMES && dispatched < MAX_IDLE_CONCURRENT; f++) {
-        if (dispatchFetch(f, "idle")) dispatched++;
-      }
-      if (dispatched < MAX_IDLE_CONCURRENT) {
-        for (let f = curPhys - 1; f >= 1 && dispatched < MAX_IDLE_CONCURRENT; f--) {
+      if (noPacksRef.current) {
+        // Forward corridor from playhead first, then backward to the beginning
+        for (let f = curPhys; f <= TOTAL_PHYSICAL_FRAMES && dispatched < MAX_IDLE_CONCURRENT; f++) {
           if (dispatchFetch(f, "idle")) dispatched++;
+        }
+        if (dispatched < MAX_IDLE_CONCURRENT) {
+          for (let f = curPhys - 1; f >= 1 && dispatched < MAX_IDLE_CONCURRENT; f--) {
+            if (dispatchFetch(f, "idle")) dispatched++;
+          }
+        }
+      } else {
+        const curPack = getPackIndex(curPhys);
+        const isPackNeeded = (pIdx: number) => {
+          const { start, end } = getPackFrameRange(pIdx);
+          for (let f = start; f <= end; f++) {
+            if (!blobCacheRef.current.has(`${variant}:${f}`)) return true;
+          }
+          return false;
+        };
+
+        for (let p = curPack; p < TOTAL_PACKS && dispatched < MAX_IDLE_PACK_CONCURRENT; p++) {
+          if (isPackNeeded(p)) {
+            if (dispatchPackFetch(p, "idle")) dispatched++;
+          }
+        }
+        if (dispatched < MAX_IDLE_PACK_CONCURRENT) {
+          for (let p = curPack - 1; p >= 0 && dispatched < MAX_IDLE_PACK_CONCURRENT; p--) {
+            if (isPackNeeded(p)) {
+              if (dispatchPackFetch(p, "idle")) dispatched++;
+            }
+          }
         }
       }
       // Continuation is driven by each request's .finally kick.
     });
-  }, [dispatchFetch]);
+  }, [dispatchFetch, dispatchPackFetch]);
 
   useEffect(() => {
     scheduleIdleStreamRef.current = scheduleIdleStream;
@@ -502,7 +851,19 @@ export default function ScrollytellingEngine({
       if (!canvas) return;
 
       const clamped = Math.min(TOTAL_FRAMES, Math.max(1, frameFloat));
-      const targetInt = Math.floor(clamped);
+      let targetInt = Math.floor(clamped);
+
+      // Deliberate blit throttle during flings (Track A1):
+      // When |velocity| > 400 frames/s, draw every 4th integer frame;
+      // When |velocity| > 120 frames/s, draw every 2nd integer frame.
+      // Landing matters; full rate resumes the instant velocity drops.
+      const absVel = Math.abs(scrollVelocityRef.current);
+      if (absVel > 400) {
+        targetInt = Math.max(1, targetInt - (targetInt % 4));
+      } else if (absVel > 120) {
+        targetInt = Math.max(1, targetInt - (targetInt % 2));
+      }
+
       const targetPhysical = getPhysicalFrameNumber(targetInt);
       const variant = assetVariantRef.current;
       const targetKey = `${variant}:${targetPhysical}`;
@@ -534,8 +895,8 @@ export default function ScrollytellingEngine({
       }
 
       const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
-      const targetWidth = Math.floor(width * dpr);
-      const targetHeight = Math.floor(height * dpr);
+      const targetWidth = Math.round(width * dpr);
+      const targetHeight = Math.round(height * dpr);
 
       if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
         canvas.width = targetWidth;
@@ -546,7 +907,6 @@ export default function ScrollytellingEngine({
       if (!ctx) {
         ctx = canvas.getContext("2d", {
           alpha: false,
-          desynchronized: true,
         }) as CanvasRenderingContext2D | null;
         ctxRef.current = ctx;
       }
@@ -563,19 +923,19 @@ export default function ScrollytellingEngine({
       const imgRatio = imgWidth / imgHeight;
       const canvasRatio = width / height;
 
-      let drawW = width;
-      let drawH = height;
+      let drawW = Math.round(width);
+      let drawH = Math.round(height);
       let offsetX = 0;
       let offsetY = 0;
 
       if (canvasRatio > imgRatio) {
-        drawW = width;
-        drawH = width / imgRatio;
-        offsetY = (height - drawH) / 2;
+        drawW = Math.round(width);
+        drawH = Math.round(width / imgRatio);
+        offsetY = Math.round((height - drawH) / 2);
       } else {
-        drawH = height;
-        drawW = height * imgRatio;
-        offsetX = (width - drawW) / 2;
+        drawH = Math.round(height);
+        drawW = Math.round(height * imgRatio);
+        offsetX = Math.round((width - drawW) / 2);
       }
 
       ctx.globalAlpha = 1.0;
@@ -611,6 +971,10 @@ export default function ScrollytellingEngine({
       for (const [key, entry] of inflightRef.current) {
         if (key.startsWith(`${old}:`)) entry.controller.abort();
       }
+      for (const [key, entry] of packInflightRef.current) {
+        if (key.startsWith(`${old}:`)) entry.controller.abort();
+      }
+      blockedPacksRef.current.clear();
       // Drop old-variant caches (fixes the mixed 720p/1080p playback bug)
       for (const [key, asset] of bitmapCacheRef.current) {
         if (key.startsWith(`${old}:`)) {
@@ -623,6 +987,10 @@ export default function ScrollytellingEngine({
       }
       decodeQueueRef.current.length = 0;
       decodeQueuedRef.current.clear();
+      // Fresh failure-isolation state for the new variant
+      blockedKeysRef.current.clear();
+      badDecodeRef.current.clear();
+      endpointGuardRef.current = { pausedUntil: 0, backoffMs: ENDPOINT_BACKOFF_MIN_MS, consecutive: 0 };
 
       assetVariantRef.current = next;
       lastDrawnFrameRef.current = -1;
@@ -692,11 +1060,14 @@ export default function ScrollytellingEngine({
     };
     lockScroll();
 
-    // Dispatch the boot corridor through the unified loader — its concurrency
-    // cap staggers the requests naturally, and everything in flight is
-    // visible to the scheduler (no more duplicate boot fetches).
-    for (let i = 1; i <= CRITICAL_PRELOAD_COUNT; i++) {
-      dispatchFetch(i, "urgent");
+    // Dispatch the boot corridor: if packs are enabled, Pack 0 contains frames
+    // 1-16 (covering CRITICAL_PRELOAD_COUNT = 14) in a single request.
+    if (noPacksRef.current) {
+      for (let i = 1; i <= CRITICAL_PRELOAD_COUNT; i++) {
+        dispatchFetch(i, "urgent");
+      }
+    } else {
+      dispatchPackFetch(0, "urgent");
     }
 
     const bootDone = () => {
@@ -740,15 +1111,21 @@ export default function ScrollytellingEngine({
       // Abort all in-flight network requests (their .finally owns accounting)
       for (const entry of inflightRef.current.values()) entry.controller.abort();
       inflightRef.current.clear();
-      // Free decoded bitmaps + compressed blobs + decode queue
+      for (const entry of packInflightRef.current.values()) entry.controller.abort();
+      packInflightRef.current.clear();
+      // Free decoded bitmaps + compressed blobs + decode queue + breaker state
       for (const asset of bitmapCacheRef.current.values()) closeAsset(asset);
       bitmapCacheRef.current.clear();
       blobCacheRef.current.clear();
       decodeQueueRef.current.length = 0;
       decodeQueuedRef.current.clear();
+      blockedKeysRef.current.clear();
+      blockedPacksRef.current.clear();
+      badDecodeRef.current.clear();
+      endpointGuardRef.current = { pausedUntil: 0, backoffMs: ENDPOINT_BACKOFF_MIN_MS, consecutive: 0 };
       unmountedRef.current = true;
     };
-  }, [dispatchFetch, drawFrameToCanvas]);
+  }, [dispatchFetch, dispatchPackFetch, drawFrameToCanvas]);
 
   // =========================================================================
   // MAIN SCROLL ENGINE (single RAF loop, cached maxScroll, gated style writes)
@@ -780,8 +1157,13 @@ export default function ScrollytellingEngine({
           ...stats,
           urgent: urgentCountRef.current,
           idle: idleCountRef.current,
+          urgentPacks: urgentPackCountRef.current,
+          idlePacks: idlePackCountRef.current,
           blobs: blobCacheRef.current.size,
           bitmaps: bitmapCacheRef.current.size,
+          blocked: blockedKeysRef.current.size,
+          blockedPacks: blockedPacksRef.current.size,
+          endpointPaused: Date.now() < endpointGuardRef.current.pausedUntil,
         });
       }, 5000);
     }
@@ -836,14 +1218,15 @@ export default function ScrollytellingEngine({
         }
       }
       const vid = videoRef.current;
-      if (vid) {
-        // display:none alone keeps the decoder running forever — actually pause.
-        if (vOpacity <= 0.005 && !videoPausedRef.current) {
-          videoPausedRef.current = true;
+      if (vid && !videoPermanentlyStoppedRef.current) {
+        // Fire-and-forget (Track A2): play once at boot → on fade-out pause + reset currentTime to 0 → never resume.
+        // Scrolled-back hero shows the paused first frame (visually same scene as canvas frame 1).
+        if (vOpacity <= 0.005) {
+          videoPermanentlyStoppedRef.current = true;
           vid.pause();
-        } else if (vOpacity > 0.005 && videoPausedRef.current) {
-          videoPausedRef.current = false;
-          vid.play().catch(() => {});
+          try {
+            vid.currentTime = 0;
+          } catch {}
         }
       }
 

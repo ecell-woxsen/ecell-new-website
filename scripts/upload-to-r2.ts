@@ -46,6 +46,7 @@ const MIME_TYPES: Record<string, string> = {
   ".ico": "image/x-icon",
   ".json": "application/json",
   ".txt": "text/plain",
+  ".bin": "application/octet-stream",
 };
 
 interface FileUploadTask {
@@ -175,6 +176,8 @@ async function main() {
       "ecell-logo.png",
       "still_shot.mp4",
       "events/hult.png",
+      "ecell_packs/1080p/pack_000.bin",
+      "ecell_packs/720p/pack_000.bin",
       "ecell_shots/00001.webp",
       "ecell_shots/00840.webp",
     ];
