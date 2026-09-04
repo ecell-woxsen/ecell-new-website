@@ -1,12 +1,15 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
+import Image from "next/image";
+import { getAssetUrl } from "../../lib/assets";
+import { loadTeamPack, getCachedTeamUrl } from "../../lib/teamPack";
 
 interface TeamMember {
   name: string;
   role: string;
   department?: string;
-  image?: string;
+  image: string;
 }
 
 interface TeamGroup {
@@ -28,11 +31,13 @@ const TEAM_DATA: TeamGroup[] = [
         name: "Mohnish Singh Patwal",
         role: "President",
         department: "Executive Committee",
+        image: "/team/monis.webp",
       },
       {
         name: "Shreyas Kandi",
         role: "Vice President",
         department: "Executive Committee",
+        image: "/team/Shreyas.webp",
       },
     ],
   },
@@ -46,11 +51,13 @@ const TEAM_DATA: TeamGroup[] = [
         name: "HC",
         role: "Advisor",
         department: "Advisory Board",
+        image: "/team/hc.webp",
       },
       {
-        name: "Nihak",
+        name: "Nihal",
         role: "Advisor",
         department: "Advisory Board",
+        image: "/team/Nihal.webp",
       },
     ],
   },
@@ -64,11 +71,13 @@ const TEAM_DATA: TeamGroup[] = [
         name: "Shrinidhi",
         role: "Secretary & Head of Documentation",
         department: "Governance & Secretariat",
+        image: "/team/Shrinidhi.webp",
       },
       {
         name: "Abhichandra Medipally",
         role: "Secretary",
         department: "Governance & Secretariat",
+        image: "/team/abhi.webp",
       },
     ],
   },
@@ -82,11 +91,13 @@ const TEAM_DATA: TeamGroup[] = [
         name: "Imad",
         role: "Head of Technology",
         department: "Engineering & Digital",
+        image: "/team/imad.webp",
       },
       {
         name: "Aali",
         role: "Lead of Technology",
         department: "Engineering & Digital",
+        image: "/team/aali.webp",
       },
     ],
   },
@@ -100,11 +111,13 @@ const TEAM_DATA: TeamGroup[] = [
         name: "Mahek Malpani",
         role: "Head of Marketing & Creatives",
         department: "Brand & Communications",
+        image: "/team/mahek.webp",
       },
       {
         name: "Shloka",
         role: "Team Lead Marketing & Creatives",
         department: "Brand & Communications",
+        image: "/team/Shloka.webp",
       },
     ],
   },
@@ -118,11 +131,13 @@ const TEAM_DATA: TeamGroup[] = [
         name: "Mihir Kalway",
         role: "Head of Events & Operations",
         department: "Experience & Logistics",
+        image: "/team/mihir.webp",
       },
       {
         name: "Pooja",
         role: "Lead of Events & Operations",
         department: "Experience & Logistics",
+        image: "/team/Pooja.webp",
       },
     ],
   },
@@ -136,11 +151,13 @@ const TEAM_DATA: TeamGroup[] = [
         name: "Pranav",
         role: "Head of Finance & Sponsorship",
         department: "Treasury & Capital",
+        image: "/team/pranav.webp",
       },
       {
         name: "Minal",
         role: "Team Lead Finance & Operations",
         department: "Treasury & Capital",
+        image: "/team/minal.webp",
       },
     ],
   },
@@ -154,6 +171,7 @@ const TEAM_DATA: TeamGroup[] = [
         name: "Reetika",
         role: "Head of Outreach & Partnerships",
         department: "Ecosystem & Relations",
+        image: "/team/reetika.webp",
       },
     ],
   },
@@ -162,13 +180,15 @@ const TEAM_DATA: TeamGroup[] = [
 /**
  * Editorial Museum Portrait Surface
  * Features warm studio softbox illumination, fine photographic tonal depth,
- * subtle directional keylight, and zero UI badges or card borders.
+ * subtle directional keylight, and high-performance unpacked binary images.
  */
 function EditorialPortraitSurface({
   name,
+  imageSrc,
   className,
 }: {
   name: string;
+  imageSrc?: string;
   className: string;
 }) {
   return (
@@ -181,15 +201,27 @@ function EditorialPortraitSurface({
       {/* Subtle Warm Fill Light from Bottom */}
       <div className="absolute -bottom-10 -right-10 w-48 h-48 rounded-full blur-2xl pointer-events-none bg-emerald-500/[0.04] transition-opacity duration-500" />
 
-      {/* Minimalist Editorial Monogram Silhouette */}
-      <div className="relative z-10 flex flex-col items-center justify-center p-6 text-center transition-all duration-500">
-        <span className="team-monogram font-display text-3xl sm:text-4xl tracking-wider uppercase text-slate-100/40 group-hover:text-emerald-300/60 transition-all drop-shadow-md">
-          {name.charAt(0)}
-        </span>
-      </div>
+      {/* Render Portrait Image if available */}
+      {imageSrc ? (
+        <Image
+          src={imageSrc}
+          alt={name}
+          fill
+          unoptimized={imageSrc.startsWith("blob:")}
+          className="object-cover object-top transition-transform duration-700 ease-out group-hover:scale-[1.04]"
+          sizes="(max-width: 640px) 280px, (max-width: 1024px) 340px, 400px"
+        />
+      ) : (
+        /* Minimalist Editorial Monogram Silhouette Fallback */
+        <div className="relative z-10 flex flex-col items-center justify-center p-6 text-center transition-all duration-500">
+          <span className="team-monogram font-display text-3xl sm:text-4xl tracking-wider uppercase text-slate-100/40 group-hover:text-emerald-300/60 transition-all drop-shadow-md">
+            {name.charAt(0)}
+          </span>
+        </div>
+      )}
 
-      {/* Atmospheric photographic shadow falloff */}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/10 pointer-events-none" />
+      {/* Atmospheric photographic shadow falloff overlay */}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/15 pointer-events-none" />
     </div>
   );
 }
@@ -197,6 +229,33 @@ function EditorialPortraitSurface({
 export default function TeamWallSection({}: {
   currentFrame?: number;
 }) {
+  const [packUrls, setPackUrls] = useState<Record<string, string>>(() => {
+    const initial: Record<string, string> = {};
+    for (const group of TEAM_DATA) {
+      for (const member of group.members) {
+        if (member.image) {
+          const cached = getCachedTeamUrl(member.image);
+          if (cached) initial[member.image] = cached;
+        }
+      }
+    }
+    return initial;
+  });
+
+  useEffect(() => {
+    loadTeamPack().then((urls) => {
+      setPackUrls((prev) => ({ ...prev, ...urls }));
+    });
+  }, []);
+
+  const resolveImage = (imagePath?: string): string | undefined => {
+    if (!imagePath) return undefined;
+    return packUrls[imagePath] || getAssetUrl(imagePath);
+  };
+
+  const president = TEAM_DATA[0]?.members[0];
+  const vicePresident = TEAM_DATA[0]?.members[1];
+
   return (
     <div className="relative flex items-center gap-16 sm:gap-24 md:gap-32 lg:gap-40 shrink-0 select-none">
       {/* INVISIBLE APPLE STUDIO SOFTBOX ILLUMINATION */}
@@ -259,13 +318,14 @@ export default function TeamWallSection({}: {
           </div>
 
           <EditorialPortraitSurface
-            name="Mohnish Singh Patwal"
+            name={president?.name || "Mohnish Singh Patwal"}
+            imageSrc={resolveImage(president?.image)}
             className="w-full h-[400px] sm:h-[460px] lg:h-[520px]"
           />
 
           <div className="mt-4 text-left">
             <h3 className="team-hero-name font-display text-2xl sm:text-3xl lg:text-[32px] uppercase tracking-tight leading-tight text-slate-300/80 group-hover:text-emerald-300 transition-colors drop-shadow-[0_3px_12px_rgba(0,0,0,0.98)]">
-              Mohnish Singh Patwal
+              {president?.name || "Mohnish Singh Patwal"}
             </h3>
             <p className="team-hero-role font-mono text-[13px] sm:text-[14px] lg:text-[15px] font-normal tracking-wide mt-1.5 text-slate-400 drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)] transition-colors">
               President & Strategic Lead
@@ -283,13 +343,14 @@ export default function TeamWallSection({}: {
           </div>
 
           <EditorialPortraitSurface
-            name="Shreyas Kandi"
+            name={vicePresident?.name || "Shreyas Kandi"}
+            imageSrc={resolveImage(vicePresident?.image)}
             className="w-full h-[370px] sm:h-[420px] lg:h-[470px]"
           />
 
           <div className="mt-4 text-left">
             <h3 className="team-hero-name font-display text-xl sm:text-2xl lg:text-[26px] uppercase tracking-tight leading-tight text-slate-300/80 group-hover:text-emerald-300 transition-colors drop-shadow-[0_3px_12px_rgba(0,0,0,0.98)]">
-              Shreyas Kandi
+              {vicePresident?.name || "Shreyas Kandi"}
             </h3>
             <p className="team-hero-role font-mono text-[13px] sm:text-[14px] lg:text-[15px] font-normal tracking-wide mt-1.5 text-slate-400 drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)] transition-colors">
               Vice President & Operations
@@ -321,6 +382,7 @@ export default function TeamWallSection({}: {
                   {/* Square Exhibition Print */}
                   <EditorialPortraitSurface
                     name={member.name}
+                    imageSrc={resolveImage(member.image)}
                     className="w-full aspect-square"
                   />
 

@@ -123,7 +123,13 @@ async function main() {
     process.exit(1);
   }
 
-  const tasks = getAllFiles(publicDir);
+  const filters = process.argv.slice(2).filter((arg) => !arg.startsWith("--"));
+  let tasks = getAllFiles(publicDir);
+  if (filters.length > 0) {
+    tasks = tasks.filter((t) => filters.some((f) => t.r2Key === f || t.r2Key.startsWith(f.endsWith("/") ? f : `${f}/`)));
+    console.log(`🎯 Filter active: uploading matching [${filters.join(", ")}]`);
+  }
+
   const totalFiles = tasks.length;
   const totalBytes = tasks.reduce((sum, t) => sum + t.size, 0);
   const totalMB = (totalBytes / (1024 * 1024)).toFixed(2);
@@ -177,6 +183,9 @@ async function main() {
       "still_shot.mp4",
       "events/hult.png",
       "ecell_packs/events_pack.bin",
+      "ecell_packs/team_pack.bin",
+      "team/monis.webp",
+      "team/imad.webp",
       "ecell_packs/1080p/pack_000.bin",
       "ecell_packs/720p/pack_000.bin",
       "ecell_shots/00001.webp",

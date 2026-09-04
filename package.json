@@ -9,6 +9,7 @@
     "lint": "eslint",
     "pack:frames": "bun run scripts/pack-frames.ts",
     "pack:events": "bun run scripts/pack-events.ts",
+    "pack:team": "bun run scripts/pack-team.ts",
     "upload:r2": "bun run scripts/upload-to-r2.ts"
   },
   "dependencies": {

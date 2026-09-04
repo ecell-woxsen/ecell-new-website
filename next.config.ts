@@ -55,6 +55,24 @@ const nextConfig: NextConfig = {
         ],
       },
       {
+        source: "/team/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
+      {
+        source: "/ecell_packs/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
+      {
         source: "/still_shot.mp4",
         headers: [
           {

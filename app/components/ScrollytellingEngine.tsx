@@ -17,6 +17,7 @@ import {
   getPackUrl,
 } from "../lib/assets";
 import { loadEventsPack } from "../lib/eventsPack";
+import { loadTeamPack } from "../lib/teamPack";
 
 interface ScrollytellingEngineProps {
   onFrameUpdate?: (frame: number) => void;
@@ -773,6 +774,10 @@ function ScrollytellingEngine({
       if (centerVirtual > 300) {
         loadEventsPack().catch(() => {});
       }
+      // Pre-warm the single team pack well before reaching the team wall (frame 840)
+      if (centerVirtual > 500) {
+        loadTeamPack().catch(() => {});
+      }
     },
     [dispatchFetch, dispatchPackFetch, enqueueDecode]
   );
@@ -786,8 +791,9 @@ function ScrollytellingEngine({
     if (idleHandleRef.current !== null) return;
     if (urgentCountRef.current > 0 || urgentPackCountRef.current > 0) return;
 
-    // Pre-warm the events pack quietly during idle periods
+    // Pre-warm the events and team packs quietly during idle periods
     loadEventsPack().catch(() => {});
+    loadTeamPack().catch(() => {});
 
     const variant = assetVariantRef.current;
     let blobCount = 0;
