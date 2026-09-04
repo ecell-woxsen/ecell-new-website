@@ -27,6 +27,23 @@ const PLAYHEAD_WINDOW = 3; // Immediate high-priority playhead target window
 // Image asset type: ImageBitmap (decoded off-main-thread) or HTMLImageElement fallback
 type FrameAsset = ImageBitmap | HTMLImageElement;
 
+// Safe cross-browser idle callback helper (with iOS/Safari fallback)
+const requestIdle =
+  typeof window !== "undefined" && "requestIdleCallback" in window
+    ? (cb: () => void) =>
+        (window as Window & { requestIdleCallback: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback(
+          cb,
+          { timeout: 1000 }
+        )
+    : (cb: () => void) => setTimeout(cb, 60);
+
+const cancelIdle =
+  typeof window !== "undefined" && "cancelIdleCallback" in window
+    ? (id: any) =>
+        (window as Window & { cancelIdleCallback: (id: number) => void }).cancelIdleCallback(id)
+    : (id: any) => clearTimeout(id);
+
+
 export default function ScrollytellingEngine({
   onFrameUpdate,
   onOpenJoinModal,
@@ -57,6 +74,8 @@ export default function ScrollytellingEngine({
   const activeControllersRef = useRef<Map<number, AbortController>>(new Map());
   const inFlightCountRef = useRef(0);
   const lastScheduledIntegerRef = useRef<number>(-1);
+  const idleHandleRef = useRef<any>(null);
+  const scheduleIdleStreamRef = useRef<() => void>(() => {});
 
   // React state for boot & overlays
   const [loadProgress, setLoadProgress] = useState(0);
@@ -77,10 +96,16 @@ export default function ScrollytellingEngine({
   const lastDrawnWidthRef = useRef<number>(0);
   const lastDrawnHeightRef = useRef<number>(0);
 
-  // Helper to format frame CDN URL strictly to 1080p ecell_shots (resolves virtual to physical)
+  // Adaptive Resolution: "720p" for mobile/tablet (<1024px), "1080p" for desktop
+  const assetVariantRef = useRef<"1080p" | "720p">(
+    typeof window !== "undefined" && window.innerWidth < 1024 ? "720p" : "1080p"
+  );
+
+  // Helper to format frame CDN URL using active adaptive resolution variant
   const getFramePath = useCallback((frameNum: number) => {
-    return getFrameUrl(frameNum, "1080p");
+    return getFrameUrl(frameNum, assetVariantRef.current);
   }, []);
+
 
   // Native Off-Thread Bitmap Decoder (Fast native GPU decode, no slow software resampler)
   const decodeBlobToBitmap = useCallback(
@@ -300,6 +325,113 @@ export default function ScrollytellingEngine({
     [decodeBlobToBitmap, getFramePath]
   );
 
+  // =========================================================================
+  // BACKGROUND IDLE STREAMER (STRATEGY 1)
+  // =========================================================================
+  // Quietly downloads remaining compressed WebP blobs into RAM (~45 MB) when
+  // the user is idle or scrolling gently. Runs at low concurrency (<= 2) so it
+  // never competes with real-time scrolling priority buffers.
+  const scheduleIdleStream = useCallback(() => {
+    if (idleHandleRef.current !== null) return;
+    if (blobCacheRef.current.size >= TOTAL_PHYSICAL_FRAMES) return;
+
+    idleHandleRef.current = requestIdle(() => {
+      idleHandleRef.current = null;
+
+      // Ensure network pipeline has room and user is not rapidly flinging
+      if (Math.abs(scrollVelocityRef.current) > 2 || inFlightCountRef.current >= 2) {
+        return;
+      }
+
+      if (blobCacheRef.current.size >= TOTAL_PHYSICAL_FRAMES) {
+        return;
+      }
+
+      const curPhysical = getPhysicalFrameNumber(currentFrameRef.current);
+      const candidates: number[] = [];
+
+      // 1. First priority: forward corridor from current frame to end of sequence
+      for (let f = curPhysical; f <= TOTAL_PHYSICAL_FRAMES; f++) {
+        if (!blobCacheRef.current.has(f) && !activeControllersRef.current.has(f)) {
+          candidates.push(f);
+          if (candidates.length >= 2) break;
+        }
+      }
+
+      // 2. Second priority: backward corridor from current frame to beginning
+      if (candidates.length < 2) {
+        for (let f = curPhysical - 1; f >= 1; f--) {
+          if (!blobCacheRef.current.has(f) && !activeControllersRef.current.has(f)) {
+            candidates.push(f);
+            if (candidates.length >= 2) break;
+          }
+        }
+      }
+
+      if (candidates.length === 0) return;
+
+      for (const frameToFetch of candidates) {
+        if (inFlightCountRef.current >= 2) break;
+
+        const controller = new AbortController();
+        activeControllersRef.current.set(frameToFetch, controller);
+        inFlightCountRef.current++;
+
+        const url = getFramePath(frameToFetch);
+
+        fetch(url, { signal: controller.signal, cache: "force-cache" })
+          .then(async (res) => {
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            return await res.blob();
+          })
+          .then((blob) => {
+            activeControllersRef.current.delete(frameToFetch);
+            inFlightCountRef.current = Math.max(0, inFlightCountRef.current - 1);
+
+            // Store compressed WebP blob permanently in RAM (~20-50 KB)
+            blobCacheRef.current.set(frameToFetch, blob);
+
+            // If within active near-field window, decode to GPU bitmap immediately
+            const nowPhysical = getPhysicalFrameNumber(currentFrameRef.current);
+            const dist = Math.abs(frameToFetch - nowPhysical);
+            if (
+              dist <= 15 &&
+              !bitmapCacheRef.current.has(frameToFetch) &&
+              !inFlightDecodesRef.current.has(frameToFetch)
+            ) {
+              inFlightDecodesRef.current.add(frameToFetch);
+              decodeBlobToBitmap(frameToFetch).then((asset) => {
+                inFlightDecodesRef.current.delete(frameToFetch);
+                if (asset) {
+                  bitmapCacheRef.current.set(frameToFetch, asset);
+                  if (nowPhysical === frameToFetch || dist <= 1) {
+                    lastDrawnFrameRef.current = -1;
+                  }
+                }
+              });
+            }
+
+            // Continue idle filling if user is still idle
+            if (Math.abs(scrollVelocityRef.current) < 2) {
+              scheduleIdleStream();
+            }
+          })
+          .catch((err) => {
+            activeControllersRef.current.delete(frameToFetch);
+            inFlightCountRef.current = Math.max(0, inFlightCountRef.current - 1);
+            if (err.name !== "AbortError") {
+              scheduleIdleStream();
+            }
+          });
+      }
+    });
+  }, [decodeBlobToBitmap, getFramePath]);
+
+  useEffect(() => {
+    scheduleIdleStreamRef.current = scheduleIdleStream;
+  }, [scheduleIdleStream]);
+
+
   // Canvas drawing function optimized for 60Hz & 120Hz displays
   // Uses discrete contiguous frames to completely eliminate double-exposure ghosting and teleport snaps
   const drawFrameToCanvas = useCallback(
@@ -404,11 +536,17 @@ export default function ScrollytellingEngine({
     [decodeBlobToBitmap, findNearestLoadedFrame]
   );
 
-  // Resize handler caching window dimensions
+  // Resize handler caching window dimensions and updating adaptive resolution variant
   useEffect(() => {
     const updateDimensions = () => {
       windowWidthRef.current = window.innerWidth;
       windowHeightRef.current = window.innerHeight;
+
+      const newVariant = window.innerWidth < 1024 ? "720p" : "1080p";
+      if (assetVariantRef.current !== newVariant) {
+        assetVariantRef.current = newVariant;
+      }
+
       lastDrawnFrameRef.current = -1; // Force redraw on resize
       drawFrameToCanvas(currentFrameRef.current);
     };
@@ -417,6 +555,7 @@ export default function ScrollytellingEngine({
     window.addEventListener("resize", updateDimensions);
     return () => window.removeEventListener("resize", updateDimensions);
   }, [drawFrameToCanvas]);
+
 
   // Progressive Bootstrap & Ahead-Of-Time (AOT) Corridor Streamer
   useEffect(() => {
@@ -467,14 +606,19 @@ export default function ScrollytellingEngine({
       // Render initial frame immediately
       drawFrameToCanvas(1);
 
-      // Start priority buffer streaming
+      // Start priority buffer streaming & begin background idle caching
       schedulePriorityBuffer(1, 1.0);
+      scheduleIdleStreamRef.current();
     };
 
     bootEngine();
 
     return () => {
       isCancelled = true;
+      if (idleHandleRef.current !== null) {
+        cancelIdle(idleHandleRef.current);
+        idleHandleRef.current = null;
+      }
       // Abort any in-flight network requests
       for (const controller of activeControllersRef.current.values()) {
         controller.abort();
@@ -539,6 +683,9 @@ export default function ScrollytellingEngine({
       if (currentInt !== lastScheduledIntegerRef.current || Math.abs(velocity) > 3) {
         lastScheduledIntegerRef.current = currentInt;
         schedulePriorityBuffer(renderFloat, velocity);
+      } else if (Math.abs(velocity) < 1.0 && inFlightCountRef.current < 2) {
+        // Trigger idle stream when resting or gliding slowly
+        scheduleIdleStreamRef.current();
       }
 
       // Direct DOM Hero Video Crossfade (Zero React Virtual DOM overhead in RAF)
