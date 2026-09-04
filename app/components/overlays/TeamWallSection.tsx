@@ -313,7 +313,7 @@ export default function TeamWallSection({}: {
           <div className="flex items-center gap-2 h-5 mb-3">
             <span className="team-hero-dot w-1.5 h-1.5 rounded-full bg-emerald-400/50 transition-all duration-300" />
             <span className="team-hero-label font-mono text-[10px] sm:text-[11px] font-semibold tracking-[0.2em] uppercase text-emerald-400/70 transition-colors duration-300">
-              EXECUTIVE // PRESIDENT
+              EXECUTIVE PRESIDENT
             </span>
           </div>
 
@@ -338,7 +338,7 @@ export default function TeamWallSection({}: {
           <div className="flex items-center gap-2 h-5 mb-3">
             <span className="team-hero-dot w-1.5 h-1.5 rounded-full bg-emerald-400/50 transition-all duration-300" />
             <span className="team-hero-label font-mono text-[10px] sm:text-[11px] font-semibold tracking-[0.2em] uppercase text-emerald-400/70 transition-colors duration-300">
-              EXECUTIVE // VICE PRESIDENT
+              EXECUTIVE VICE PRESIDENT
             </span>
           </div>
 
@@ -371,7 +371,7 @@ export default function TeamWallSection({}: {
             <div className="flex items-center gap-2 h-5 mb-3">
               <span className="team-col-dot w-1.5 h-1.5 rounded-full bg-emerald-400/50 transition-all duration-300" />
               <span className="team-col-label font-mono text-[10.5px] sm:text-[11.5px] font-semibold tracking-[0.2em] uppercase text-emerald-400/60 transition-colors duration-300 truncate">
-                // {grp.label}
+                {grp.label}
               </span>
             </div>
 

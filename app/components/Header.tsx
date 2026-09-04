@@ -30,22 +30,20 @@ function Header({
       <div className="max-w-7xl mx-auto flex items-center justify-center pointer-events-auto">
         {/* Center Floating Pill Navbar */}
         <nav className="flex items-center gap-1.5 sm:gap-3 bg-black/70 border border-white/15 backdrop-blur-2xl px-2 sm:px-3 py-1.5 rounded-full shadow-2xl shadow-black/80">
-          {/* Logo Badge */}
+          {/* Logo */}
           <button
             onClick={() => onNavigateToFrame(1)}
-            className="flex items-center gap-2 pr-1 group cursor-pointer"
+            className="flex items-center gap-2 px-1 group cursor-pointer"
             title="Return to Home"
           >
-            <div className="relative w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-slate-900/90 border border-white/15 p-1 flex items-center justify-center overflow-hidden">
-              <Image
-                src={getAssetUrl("/ecell-logo.png")}
-                alt="E-Cell Logo"
-                width={28}
-                height={28}
-                className="object-contain"
-                priority
-              />
-            </div>
+            <Image
+              src={getAssetUrl("/ecell-logo.png")}
+              alt="E-Cell Logo"
+              width={32}
+              height={32}
+              className="w-7 h-7 sm:w-8 sm:h-8 object-contain transition-transform duration-200 group-hover:scale-105"
+              priority
+            />
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
           </button>
 

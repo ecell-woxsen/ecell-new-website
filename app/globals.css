@@ -8,27 +8,39 @@
   font-display: swap;
 }
 
+@theme {
+  --font-sans: var(--font-bebas), "Bebas Neue", sans-serif;
+  --font-mono: var(--font-bebas), "Bebas Neue", sans-serif;
+  --font-display: var(--font-bebas), "Bebas Neue", sans-serif;
+  --font-body: var(--font-bebas), "Bebas Neue", sans-serif;
+  --font-heading: var(--font-bebas), "Bebas Neue", sans-serif;
+}
+
 :root {
   --ink: #040608;
   --white: #ffffff;
   --green-lt: #3fb950;
   --green-primary: #16a34a;
   --font-bebas: "Bebas Neue", sans-serif;
-  --font-dm-sans: var(--font-dm-sans), "DM Sans", sans-serif;
-  --font-space-mono: var(--font-space-mono), "Space Mono", monospace;
+  --font-dm-sans: var(--font-bebas), "Bebas Neue", sans-serif;
+  --font-space-mono: var(--font-bebas), "Bebas Neue", sans-serif;
 }
 
 html, body {
   min-height: 100%;
   background: var(--ink);
   color: var(--white);
-  font-family: var(--font-dm-sans), "DM Sans", sans-serif;
+  font-family: var(--font-bebas), "Bebas Neue", sans-serif;
   font-size: 16px;
-  line-height: 1.6;
+  line-height: 1.4;
   overscroll-behavior-y: none;
   /* Reserve the scrollbar gutter so the boot-time scroll lock doesn't cause
      a layout width jump (notable on Windows/Linux scrollbar setups). */
   scrollbar-gutter: stable;
+}
+
+*, ::before, ::after {
+  font-family: var(--font-bebas), "Bebas Neue", sans-serif;
 }
 
 /* Lenis smooth scrolling core styles */
@@ -54,11 +66,11 @@ html.lenis, html.lenis body {
 }
 
 .font-mono {
-  font-family: var(--font-space-mono), "Space Mono", monospace;
+  font-family: var(--font-bebas), "Bebas Neue", sans-serif;
 }
 
 .font-body {
-  font-family: var(--font-dm-sans), "DM Sans", sans-serif;
+  font-family: var(--font-bebas), "Bebas Neue", sans-serif;
 }
 
 h1, h2, h3, h4, h5, h6, .font-heading {
