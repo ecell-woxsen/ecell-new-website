@@ -195,11 +195,21 @@ function EditorialPortraitSurface({
     <div
       className={`team-portrait-surface relative overflow-hidden rounded-2xl border border-white/15 shadow-[0_25px_60px_rgba(0,0,0,0.9)] bg-gradient-to-b from-[#181d26] via-[#0f131a] to-[#080b10] flex items-center justify-center select-none group-hover:border-emerald-400/40 transition-all duration-500 ${className}`}
     >
-      {/* Studio Softbox Keylight from Top-Left */}
-      <div className="absolute -top-16 -left-16 w-56 h-56 rounded-full blur-3xl pointer-events-none bg-white/[0.06] transition-opacity duration-500" />
+      {/* Studio Softbox Keylight from Top-Left (GPU-performant radial gradient, 0 blur kernels) */}
+      <div
+        className="absolute -top-16 -left-16 w-56 h-56 rounded-full pointer-events-none"
+        style={{
+          background: "radial-gradient(circle, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 40%, transparent 70%)",
+        }}
+      />
 
-      {/* Subtle Warm Fill Light from Bottom */}
-      <div className="absolute -bottom-10 -right-10 w-48 h-48 rounded-full blur-2xl pointer-events-none bg-emerald-500/[0.04] transition-opacity duration-500" />
+      {/* Subtle Warm Fill Light from Bottom (GPU-performant radial gradient, 0 blur kernels) */}
+      <div
+        className="absolute -bottom-10 -right-10 w-48 h-48 rounded-full pointer-events-none"
+        style={{
+          background: "radial-gradient(circle, rgba(52, 211, 153, 0.06) 0%, rgba(52, 211, 153, 0.015) 45%, transparent 70%)",
+        }}
+      />
 
       {/* Render Portrait Image if available */}
       {imageSrc ? (
@@ -226,7 +236,9 @@ function EditorialPortraitSurface({
   );
 }
 
-export default function TeamWallSection({}: {
+export default function TeamWallSection({
+  currentFrame = 1,
+}: {
   currentFrame?: number;
 }) {
   const [packUrls, setPackUrls] = useState<Record<string, string>>(() => {
@@ -248,9 +260,20 @@ export default function TeamWallSection({}: {
     });
   }, []);
 
+  // Frame-range culling: Only mount heavy image decodes when near or inside the gallery
+  // When user is at Hero/About (frame < 650), unmount images to free GPU textures completely
+  const shouldRenderImages = currentFrame >= 650 && currentFrame <= 1262;
+
   const resolveImage = (imagePath?: string): string | undefined => {
-    if (!imagePath) return undefined;
-    return packUrls[imagePath] || getAssetUrl(imagePath);
+    if (!imagePath || !shouldRenderImages) return undefined;
+    // 1. Prefer packed blob URL if available
+    if (packUrls[imagePath]) return packUrls[imagePath];
+    // 2. Only fall back to direct network fetch if the user is approaching the team wall
+    if (currentFrame >= 750) {
+      return getAssetUrl(imagePath);
+    }
+    // 3. Otherwise show monogram silhouette fallback until pack is ready
+    return undefined;
   };
 
   const president = TEAM_DATA[0]?.members[0];
@@ -258,9 +281,9 @@ export default function TeamWallSection({}: {
 
   return (
     <div className="relative flex items-center gap-16 sm:gap-24 md:gap-32 lg:gap-40 shrink-0 select-none">
-      {/* INVISIBLE APPLE STUDIO SOFTBOX ILLUMINATION */}
+      {/* INVISIBLE APPLE STUDIO SOFTBOX ILLUMINATION (Optimized radial gradient without 900px blur kernel) */}
       <div
-        className="absolute -top-40 left-0 right-0 h-[900px] pointer-events-none blur-3xl rounded-full"
+        className="absolute -top-40 left-0 right-0 h-[900px] pointer-events-none rounded-full"
         style={{
           background: `radial-gradient(ellipse at 45% 25%, rgba(255, 255, 255, 0.055) 0%, rgba(255, 255, 255, 0.015) 55%, transparent 80%)`,
         }}

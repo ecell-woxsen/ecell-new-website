@@ -40,7 +40,7 @@ export function loadTeamPack(): Promise<Record<string, string>> {
       let offset = 4 + headerLen;
 
       for (const item of manifest) {
-        const payloadSlice = new Uint8Array(buffer, offset, item.len);
+        const payloadSlice = buffer.slice(offset, offset + item.len);
         const blob = new Blob([payloadSlice], { type: item.mime });
         urls[item.path] = URL.createObjectURL(blob);
         offset += item.len;

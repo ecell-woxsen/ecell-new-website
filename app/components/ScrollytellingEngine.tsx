@@ -288,6 +288,26 @@ function ScrollytellingEngine({
   const targetNavigationFrameRef = useRef<number | null>(null);
   const videoPermanentlyStoppedRef = useRef(false);
 
+  // Simulated scrollback navigation state
+  const navSimulationRef = useRef<{
+    active: boolean;
+    startY: number;
+    targetY: number;
+    targetFrame: number;
+    onComplete?: () => void;
+  }>({
+    active: false,
+    startY: 0,
+    targetY: 0,
+    targetFrame: 1,
+  });
+  const onNavigationCompleteRef = useRef(onNavigationComplete);
+  const pendingNavRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    onNavigationCompleteRef.current = onNavigationComplete;
+  }, [onNavigationComplete]);
+
   // Pack batching state (Track B)
   const noPacksRef = useRef(false);
   const lastBlobPrunePackRef = useRef(-1);
@@ -1207,13 +1227,20 @@ function ScrollytellingEngine({
       }
 
       ctx.globalAlpha = 1.0;
-      ctx.drawImage(asset, offsetX, offsetY, drawW, drawH);
+      try {
+        ctx.drawImage(asset, offsetX, offsetY, drawW, drawH);
 
-      stats.drawn++;
-      lastDrawnKeyRef.current = drawKey;
-      lastDrawnFrameRef.current = physOfKey(drawKey);
-      lastDrawnWidthRef.current = width;
-      lastDrawnHeightRef.current = height;
+        stats.drawn++;
+        lastDrawnKeyRef.current = drawKey;
+        lastDrawnFrameRef.current = physOfKey(drawKey);
+        lastDrawnWidthRef.current = width;
+        lastDrawnHeightRef.current = height;
+      } catch (err) {
+        // If an asset was closed or detached, evict from cache to prevent crash and allow re-decode
+        if (drawKey) {
+          bitmapCacheRef.current.delete(drawKey);
+        }
+      }
     },
     [enqueueDecode, findNearestLoadedKey]
   );
@@ -1405,6 +1432,73 @@ function ScrollytellingEngine({
   }, [dispatchFetch, dispatchPackFetch, drawFrameToCanvas]);
 
   // =========================================================================
+  // SIMULATED SCROLLBACK DRIVER
+  // =========================================================================
+  const startSimulatedNavigation = useCallback(
+    (targetFrame: number, onDone?: () => void) => {
+      const target = Math.min(TOTAL_FRAMES, Math.max(1, targetFrame));
+      const targetProgress = (target - 1) / (TOTAL_FRAMES - 1);
+      const targetScrollY = targetProgress * maxScrollRef.current;
+
+      if (!lenisRef.current) {
+        pendingNavRef.current = target;
+        return;
+      }
+
+      const currentScroll = lenisRef.current.scroll;
+
+      // If already at or within snapping distance of destination
+      if (Math.abs(targetScrollY - currentScroll) < 5) {
+        navSimulationRef.current.active = false;
+        isProgrammaticNavRef.current = false;
+        targetNavigationFrameRef.current = null;
+        lastReportedFrameRef.current = target;
+        setCurrentFrame(target);
+        if (onFrameUpdate) {
+          onFrameUpdate(target);
+        }
+        if (onDone) {
+          onDone();
+        }
+        return;
+      }
+
+      const prefersReduced =
+        typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (prefersReduced) {
+        lenisRef.current.scrollTo(targetScrollY, { immediate: true, programmatic: true });
+        navSimulationRef.current.active = false;
+        isProgrammaticNavRef.current = false;
+        targetNavigationFrameRef.current = null;
+        lastReportedFrameRef.current = target;
+        setCurrentFrame(target);
+        if (onFrameUpdate) {
+          onFrameUpdate(target);
+        }
+        if (onDone) {
+          onDone();
+        }
+        return;
+      }
+
+      isProgrammaticNavRef.current = true;
+      targetNavigationFrameRef.current = target;
+      navSimulationRef.current = {
+        active: true,
+        startY: currentScroll,
+        targetY: targetScrollY,
+        targetFrame: target,
+        onComplete: onDone,
+      };
+    },
+    [onFrameUpdate]
+  );
+  const startSimulatedNavigationRef = useRef(startSimulatedNavigation);
+  useEffect(() => {
+    startSimulatedNavigationRef.current = startSimulatedNavigation;
+  }, [startSimulatedNavigation]);
+
+  // =========================================================================
   // MAIN SCROLL ENGINE (single RAF loop, cached maxScroll, gated style writes)
   // =========================================================================
   useEffect(() => {
@@ -1424,6 +1518,16 @@ function ScrollytellingEngine({
     const handleVirtualScroll = (data: { deltaX: number; deltaY: number; event: WheelEvent | TouchEvent }): boolean => {
       // Horizontal or zero-delta events are unconstrained
       if (Math.abs(data.deltaY) < 0.001) return true;
+
+      // Cancel simulated navigation if active so user manual gesture takes over immediately
+      if (navSimulationRef.current.active) {
+        navSimulationRef.current.active = false;
+        isProgrammaticNavRef.current = false;
+        targetNavigationFrameRef.current = null;
+        if (onNavigationCompleteRef.current) {
+          onNavigationCompleteRef.current();
+        }
+      }
 
       const now = performance.now();
       const dt = Math.max(0.001, (now - lastInputTime) / 1000);
@@ -1497,6 +1601,28 @@ function ScrollytellingEngine({
 
     lenisRef.current = lenis;
 
+    // Flush any pending navigation requested before Lenis was ready
+    if (pendingNavRef.current !== null) {
+      const pending = pendingNavRef.current;
+      pendingNavRef.current = null;
+      startSimulatedNavigationRef.current(pending, onNavigationCompleteRef.current);
+    }
+
+    const handleUserInterruption = () => {
+      if (navSimulationRef.current.active) {
+        navSimulationRef.current.active = false;
+        isProgrammaticNavRef.current = false;
+        targetNavigationFrameRef.current = null;
+        if (onNavigationCompleteRef.current) {
+          onNavigationCompleteRef.current();
+        }
+      }
+    };
+
+    window.addEventListener("wheel", handleUserInterruption, { passive: true });
+    window.addEventListener("touchstart", handleUserInterruption, { passive: true });
+    window.addEventListener("keydown", handleUserInterruption, { passive: true });
+
     let animFrameId: number;
     let debugInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -1542,6 +1668,50 @@ function ScrollytellingEngine({
     };
 
     const renderLoop = (time: number) => {
+      const now = performance.now();
+      const dt = Math.min(0.05, Math.max(0.001, (now - lastTimeRef.current) / 1000));
+      lastTimeRef.current = now;
+
+      // Simulated scroll driver for button clicks / programmatic navigation
+      if (navSimulationRef.current.active && lenisRef.current) {
+        const sim = navSimulationRef.current;
+        const currentScroll = lenis.scroll;
+        const distRemaining = sim.targetY - currentScroll;
+        const absDist = Math.abs(distRemaining);
+
+        if (absDist < 4) {
+          lenis.scrollTo(sim.targetY, { immediate: true, programmatic: true });
+          const finalFrame = sim.targetFrame;
+          const onCompleteCb = sim.onComplete;
+          sim.active = false;
+          isProgrammaticNavRef.current = false;
+          targetNavigationFrameRef.current = null;
+          lastReportedFrameRef.current = finalFrame;
+          setCurrentFrame(finalFrame);
+          if (onFrameUpdate) {
+            onFrameUpdate(finalFrame);
+          }
+          if (onCompleteCb) {
+            onCompleteCb();
+          }
+        } else {
+          const isTouchDevice = typeof window !== "undefined" && ("ontouchstart" in window || navigator.maxTouchPoints > 0);
+          const maxSpeed = isTouchDevice ? 1600 : 2600; // px/sec, conforms to playhead frame governor
+          const distTraveled = Math.abs(currentScroll - sim.startY);
+
+          // Smooth ramp-up from start (over first 350px)
+          const easeIn = Math.max(0.2, Math.min(1, Math.sqrt(distTraveled / 350)));
+          // Smooth deceleration into target (over final 500px)
+          const easeOut = Math.max(0.15, Math.min(1, Math.sqrt(absDist / 500)));
+
+          const currentSpeed = maxSpeed * Math.min(easeIn, easeOut);
+          const step = Math.min(absDist, Math.max(2, currentSpeed * dt));
+          const nextScroll = currentScroll + Math.sign(distRemaining) * step;
+
+          lenis.scrollTo(nextScroll, { immediate: true, programmatic: true });
+        }
+      }
+
       lenis.raf(time);
 
       const scrollY = lenis.scroll;
@@ -1550,10 +1720,6 @@ function ScrollytellingEngine({
 
       const targetFloat = 1 + progress * (TOTAL_FRAMES - 1);
       const prevFloat = currentFrameRef.current;
-
-      const now = performance.now();
-      const dt = Math.min(0.05, Math.max(0.001, (now - lastTimeRef.current) / 1000));
-      lastTimeRef.current = now;
 
       // Playhead governor: ensure visual frame advancement never exceeds safe decoding rate
       let renderFloat: number;
@@ -1725,6 +1891,9 @@ function ScrollytellingEngine({
     return () => {
       cancelAnimationFrame(animFrameId);
       if (debugInterval) clearInterval(debugInterval);
+      window.removeEventListener("wheel", handleUserInterruption);
+      window.removeEventListener("touchstart", handleUserInterruption);
+      window.removeEventListener("keydown", handleUserInterruption);
       lenis.destroy();
       lenisRef.current = null;
     };
@@ -1740,71 +1909,20 @@ function ScrollytellingEngine({
     }
   }, [isJoinModalOpen]);
 
-  // Respond to programmatic header navigation
+  // Respond to programmatic header navigation via simulated normal scrollback
   useEffect(() => {
-    if (targetNavigationFrame !== null && targetNavigationFrame !== undefined && lenisRef.current) {
-      const target = Math.min(TOTAL_FRAMES, Math.max(1, targetNavigationFrame));
-      const targetProgress = (target - 1) / (TOTAL_FRAMES - 1);
-      const targetScrollY = targetProgress * maxScrollRef.current;
-      const currentScroll = lenisRef.current.scroll;
-      const scrollDelta = Math.abs(targetScrollY - currentScroll);
-
-      targetNavigationFrameRef.current = target;
-      isProgrammaticNavRef.current = true;
-
-      // Programmatic scroll speed limit:
-      // Cap maximum travel velocity to prevent supersonic scrolling on distant section rewinds
-      const isTouchDevice = typeof window !== "undefined" && ("ontouchstart" in window || navigator.maxTouchPoints > 0);
-      const maxNavSpeed = isTouchDevice ? 1600 : 2400; // px/sec
-      const duration = Math.max(0.7, Math.min(4.5, scrollDelta / maxNavSpeed));
-
-      schedulePriorityBuffer(target, 1.0);
-
-      lenisRef.current.scrollTo(targetScrollY, {
-        duration,
-        easing: (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2),
-        onComplete: () => {
-          isProgrammaticNavRef.current = false;
-          targetNavigationFrameRef.current = null;
-          lastReportedFrameRef.current = target;
-          setCurrentFrame(target);
-          if (onFrameUpdate) {
-            onFrameUpdate(target);
-          }
-          if (onNavigationComplete) {
-            onNavigationComplete();
-          }
-        },
+    if (targetNavigationFrame !== null && targetNavigationFrame !== undefined) {
+      startSimulatedNavigation(targetNavigationFrame, () => {
+        if (onNavigationComplete) {
+          onNavigationComplete();
+        }
       });
     }
-  }, [targetNavigationFrame, schedulePriorityBuffer, onNavigationComplete, onFrameUpdate]);
+  }, [targetNavigationFrame, startSimulatedNavigation, onNavigationComplete]);
 
   const handleExploreEvents = useCallback(() => {
-    if (lenisRef.current) {
-      const target = 630;
-      const targetProgress = (target - 1) / (TOTAL_FRAMES - 1);
-      const targetScrollY = targetProgress * maxScrollRef.current;
-      const currentScroll = lenisRef.current.scroll;
-      const scrollDelta = Math.abs(targetScrollY - currentScroll);
-
-      const isTouchDevice = typeof window !== "undefined" && ("ontouchstart" in window || navigator.maxTouchPoints > 0);
-      const maxNavSpeed = isTouchDevice ? 1600 : 2400;
-      const duration = Math.max(0.7, Math.min(4.5, scrollDelta / maxNavSpeed));
-
-      targetNavigationFrameRef.current = target;
-      isProgrammaticNavRef.current = true;
-      schedulePriorityBuffer(target, 1.0);
-
-      lenisRef.current.scrollTo(targetScrollY, {
-        duration,
-        easing: (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2),
-        onComplete: () => {
-          isProgrammaticNavRef.current = false;
-          targetNavigationFrameRef.current = null;
-        },
-      });
-    }
-  }, [schedulePriorityBuffer]);
+    startSimulatedNavigation(630);
+  }, [startSimulatedNavigation]);
 
   return (
     <>

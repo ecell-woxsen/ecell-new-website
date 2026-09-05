@@ -40,31 +40,43 @@ function WallGalleryOverlay({
   useEffect(() => {
     let rafId: number;
     let lastCheck = 0;
+    let cachedEventCards: HTMLElement[] | null = null;
+    let cachedTeamItems: HTMLElement[] | null = null;
 
     const updateActiveCards = (time: number) => {
       rafId = requestAnimationFrame(updateActiveCards);
 
-      // 120Hz optimization: Throttle layout measurement to ~30Hz (every ~33ms).
-      // Reading getBoundingClientRect() 120 times/sec causes severe layout thrashing.
-      if (time - lastCheck < 33) return;
+      // Smooth ~16Hz check (every ~60ms) is ideal for 0.35s CSS highlight transitions
+      // without burning GPU/CPU rasterization bandwidth on continuous layout reads
+      if (time - lastCheck < 60) return;
       lastCheck = time;
 
       const track = trackRef.current;
       if (!track) return;
 
-      // Skip entirely if gallery is invisible or hidden
+      // Skip entirely if gallery is invisible or hidden (zero layout flush)
       const parent = track.parentElement;
-      if (parent && getComputedStyle(parent).visibility === "hidden") return;
+      if (parent) {
+        const vis = parent.style.getPropertyValue("--gallery-vis");
+        if (vis === "hidden") return;
+      }
+
+      if (!cachedEventCards || cachedEventCards.length === 0) {
+        cachedEventCards = Array.from(track.querySelectorAll<HTMLElement>(".gallery-event-card"));
+      }
+      if (!cachedTeamItems || cachedTeamItems.length === 0) {
+        cachedTeamItems = Array.from(track.querySelectorAll<HTMLElement>(".gallery-team-item"));
+      }
 
       const screenCenter = window.innerWidth / 2;
 
       // 1. Events Section: Find closest event card to screen center
-      const eventCards = track.querySelectorAll<HTMLElement>(".gallery-event-card");
-      if (eventCards.length > 0) {
+      if (cachedEventCards.length > 0) {
         let closestEvent: HTMLElement | null = null;
         let minEventDist = Infinity;
 
-        eventCards.forEach((card) => {
+        for (let i = 0; i < cachedEventCards.length; i++) {
+          const card = cachedEventCards[i];
           const rect = card.getBoundingClientRect();
           const center = rect.left + rect.width / 2;
           const dist = Math.abs(center - screenCenter);
@@ -72,9 +84,10 @@ function WallGalleryOverlay({
             minEventDist = dist;
             closestEvent = card;
           }
-        });
+        }
 
-        eventCards.forEach((card) => {
+        for (let i = 0; i < cachedEventCards.length; i++) {
+          const card = cachedEventCards[i];
           const isActive = card === closestEvent;
           const cur = card.getAttribute("data-active");
           if (isActive && cur !== "true") {
@@ -82,16 +95,16 @@ function WallGalleryOverlay({
           } else if (!isActive && cur !== "false") {
             card.setAttribute("data-active", "false");
           }
-        });
+        }
       }
 
       // 2. Team Section: Find closest team column or hero to screen center
-      const teamItems = track.querySelectorAll<HTMLElement>(".gallery-team-item");
-      if (teamItems.length > 0) {
+      if (cachedTeamItems.length > 0) {
         let closestTeam: HTMLElement | null = null;
         let minTeamDist = Infinity;
 
-        teamItems.forEach((item) => {
+        for (let i = 0; i < cachedTeamItems.length; i++) {
+          const item = cachedTeamItems[i];
           const rect = item.getBoundingClientRect();
           const center = rect.left + rect.width / 2;
           const dist = Math.abs(center - screenCenter);
@@ -99,9 +112,10 @@ function WallGalleryOverlay({
             minTeamDist = dist;
             closestTeam = item;
           }
-        });
+        }
 
-        teamItems.forEach((item) => {
+        for (let i = 0; i < cachedTeamItems.length; i++) {
+          const item = cachedTeamItems[i];
           const isActive = item === closestTeam;
           const cur = item.getAttribute("data-active");
           if (isActive && cur !== "true") {
@@ -109,7 +123,7 @@ function WallGalleryOverlay({
           } else if (!isActive && cur !== "false") {
             item.setAttribute("data-active", "false");
           }
-        });
+        }
       }
     };
 
