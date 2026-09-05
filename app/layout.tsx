@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Bebas_Neue, DM_Sans, Space_Mono } from "next/font/google";
 import "./globals.css";
 import { getAssetUrl, R2_PUBLIC_BASE_URL } from "./lib/assets";
+import ConvexClientProvider from "./ConvexClientProvider";
 
 const bebasNeue = Bebas_Neue({
   weight: "400",
@@ -99,7 +100,9 @@ export default function RootLayout({
           fetchPriority="high"
           media="(min-width: 1024px)"
         />
-        {children}
+        <ConvexClientProvider>
+          {children}
+        </ConvexClientProvider>
       </body>
     </html>
   );

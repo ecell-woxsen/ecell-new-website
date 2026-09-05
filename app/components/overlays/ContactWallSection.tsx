@@ -1,7 +1,9 @@
 "use client";
 
 import React, { useState } from "react";
-import { ArrowRight, ArrowUpRight, CheckCircle2 } from "lucide-react";
+import { ArrowRight, ArrowUpRight, CheckCircle2, Loader2 } from "lucide-react";
+import { useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
 
 interface ContactWallSectionProps {
   currentFrame?: number;
@@ -10,21 +12,72 @@ interface ContactWallSectionProps {
 export default function ContactWallSection({
   currentFrame = 1260,
 }: ContactWallSectionProps) {
+  const submitContact = useMutation(api.contacts.submit);
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
+  const [honeypot, setHoneypot] = useState("");
 
-  const handleSend = (e: React.FormEvent) => {
+  const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSent(true);
+    if (submitting) return;
+
+    // Silent honeypot check: if bot filled this hidden field, fake success
+    if (honeypot) {
+      setSent(true);
+      return;
+    }
+
+    const trimmedName = name.trim();
+    const trimmedEmail = email.trim();
+    const trimmedMessage = message.trim();
+
+    if (trimmedName.length < 2) {
+      setErrorMsg("Please enter your name (at least 2 characters).");
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(trimmedEmail)) {
+      setErrorMsg("Please enter a valid email address.");
+      return;
+    }
+
+    if (trimmedMessage.length < 5) {
+      setErrorMsg("Please enter a message (at least 5 characters).");
+      return;
+    }
+
+    setErrorMsg(null);
+    setSubmitting(true);
+    try {
+      await submitContact({
+        name: trimmedName,
+        email: trimmedEmail,
+        message: trimmedMessage,
+        source: "website_contact_wall",
+      });
+      setSent(true);
+      setName("");
+      setEmail("");
+      setMessage("");
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error ? err.message : "Failed to send message. Please try again.";
+      setErrorMsg(msg);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const isEndReached = currentFrame >= 1200;
 
   return (
     <div
-      className="gallery-contact-section relative shrink-0 flex flex-col justify-center w-[85vw] max-w-[1200px] select-none py-6"
+      className="gallery-contact-section relative shrink-0 flex flex-col justify-center w-[85vw] max-w-[1200px] py-6"
       data-active={isEndReached ? "true" : "false"}
       style={{
         contain: "layout style",
@@ -88,7 +141,7 @@ export default function ContactWallSection({
           </p>
 
           {/* Structured Contact Details (Clean horizontal dividers) */}
-          <div className="space-y-4 max-w-[440px]">
+          <div className="space-y-4 max-w-[440px] select-text">
             {/* Email */}
             <div className="pb-3 border-b border-white/20">
               <span className="block font-mono text-[10px] sm:text-[11px] font-semibold tracking-[0.2em] text-emerald-400 uppercase mb-1 drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
@@ -183,7 +236,7 @@ export default function ContactWallSection({
           </div>
 
           {sent ? (
-            <div className="h-full min-h-[320px] flex flex-col items-start justify-center text-left py-6 select-none">
+            <div className="h-full min-h-[320px] flex flex-col items-start justify-center text-left py-6 select-none animate-in fade-in duration-300">
               <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center mb-3">
                 <CheckCircle2 className="w-6 h-6 text-emerald-400" />
               </div>
@@ -193,9 +246,38 @@ export default function ContactWallSection({
               <p className="text-xs sm:text-sm text-slate-200 mt-1.5 max-w-[280px] leading-relaxed drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]">
                 Thank you for reaching out. The E-Cell leadership team will connect with you shortly.
               </p>
+              <button
+                type="button"
+                onClick={() => setSent(false)}
+                className="mt-6 font-mono text-[11px] tracking-[0.16em] uppercase text-emerald-400 hover:text-emerald-300 underline underline-offset-4 cursor-pointer transition-colors"
+              >
+                ← Send Another Message
+              </button>
             </div>
           ) : (
-            <form onSubmit={handleSend} className="space-y-6">
+            <form
+              onSubmit={handleSend}
+              onKeyDown={(e) => e.stopPropagation()}
+              className="space-y-6 select-text"
+            >
+              {/* Honeypot field for bot spam prevention */}
+              <input
+                type="text"
+                name="website_contact_verification"
+                value={honeypot}
+                onChange={(e) => setHoneypot(e.target.value)}
+                tabIndex={-1}
+                autoComplete="off"
+                className="sr-only pointer-events-none"
+                aria-hidden="true"
+              />
+
+              {errorMsg && (
+                <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs font-mono leading-relaxed">
+                  {errorMsg}
+                </div>
+              )}
+
               {/* Field 1: Name */}
               <div className="border-b border-white/30 pb-2.5 focus-within:border-emerald-400 transition-colors">
                 <label className="block font-mono text-[10px] sm:text-[11px] tracking-[0.2em] uppercase text-emerald-400 font-semibold mb-1 drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
@@ -203,11 +285,14 @@ export default function ContactWallSection({
                 </label>
                 <input
                   required
+                  disabled={submitting}
                   type="text"
+                  autoComplete="name"
+                  maxLength={100}
                   placeholder="Enter your name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full bg-transparent text-sm sm:text-base text-slate-50 placeholder-slate-400 focus:outline-none transition-colors drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]"
+                  className="w-full bg-transparent text-sm sm:text-base text-slate-50 placeholder-slate-400 focus:outline-none transition-colors drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)] disabled:opacity-50 select-text"
                 />
               </div>
 
@@ -218,26 +303,38 @@ export default function ContactWallSection({
                 </label>
                 <input
                   required
+                  disabled={submitting}
                   type="email"
+                  autoComplete="email"
+                  maxLength={150}
                   placeholder="Enter your email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-transparent text-sm sm:text-base text-slate-50 placeholder-slate-400 focus:outline-none transition-colors drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]"
+                  className="w-full bg-transparent text-sm sm:text-base text-slate-50 placeholder-slate-400 focus:outline-none transition-colors drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)] disabled:opacity-50 select-text"
                 />
               </div>
 
               {/* Field 3: Message */}
               <div className="border-b border-white/30 pb-2.5 focus-within:border-emerald-400 transition-colors">
-                <label className="block font-mono text-[10px] sm:text-[11px] tracking-[0.2em] uppercase text-emerald-400 font-semibold mb-1 drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
-                  MESSAGE
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-mono text-[10px] sm:text-[11px] tracking-[0.2em] uppercase text-emerald-400 font-semibold drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
+                    MESSAGE
+                  </label>
+                  {message.length > 0 && (
+                    <span className="font-mono text-[10px] text-slate-400">
+                      {message.length}/3000
+                    </span>
+                  )}
+                </div>
                 <textarea
                   required
+                  disabled={submitting}
                   rows={3}
+                  maxLength={3000}
                   placeholder="Tell us about your inquiry or startup idea..."
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
-                  className="w-full bg-transparent text-sm sm:text-base text-slate-50 placeholder-slate-400 focus:outline-none transition-colors resize-none drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]"
+                  className="w-full bg-transparent text-sm sm:text-base text-slate-50 placeholder-slate-400 focus:outline-none transition-colors resize-none drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)] disabled:opacity-50 select-text"
                 />
               </div>
 
@@ -245,10 +342,20 @@ export default function ContactWallSection({
               <div className="flex justify-end pt-2">
                 <button
                   type="submit"
-                  className="px-7 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold font-mono text-xs uppercase tracking-[0.18em] flex items-center gap-2 transition-all cursor-pointer shadow-lg shadow-emerald-500/25 active:scale-[0.98]"
+                  disabled={submitting}
+                  className="px-7 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-60 disabled:cursor-not-allowed text-slate-950 font-bold font-mono text-xs uppercase tracking-[0.18em] flex items-center gap-2 transition-all cursor-pointer shadow-lg shadow-emerald-500/25 active:scale-[0.98]"
                 >
-                  <span>SEND NOTE</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
+                  {submitting ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>SENDING...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>SEND NOTE</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </>
+                  )}
                 </button>
               </div>
             </form>
