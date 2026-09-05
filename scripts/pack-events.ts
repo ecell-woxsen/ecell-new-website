@@ -5,65 +5,74 @@ interface EventItem {
   id: string;
   path: string;
   fileName: string;
-  mime: string;
 }
 
+/**
+ * Packs the RESIZED event photos (public/events_v2, produced by
+ * scripts/resize-gallery-assets.ts) into a single binary pack.
+ *
+ * Manifest keys keep the original /events/<fileName> paths so the site's
+ * lookups (/events/hult.png etc.) stay unchanged, while payloads are the
+ * re-encoded WebP versions (all <=1024px, quality 85).
+ *
+ * Output: public/ecell_packs/events_pack_v2.bin
+ * The _v2 filename busts the immutable browser/edge CDN caches.
+ */
 const EVENTS: EventItem[] = [
   {
     id: "hult",
     path: "/events/hult.png",
     fileName: "hult.png",
-    mime: "image/png",
   },
   {
     id: "panel-discussion",
     path: "/events/panel-discussion.jpg",
     fileName: "panel-discussion.jpg",
-    mime: "image/jpeg",
   },
   {
     id: "game-night",
     path: "/events/game-night.jpg",
     fileName: "game-night.jpg",
-    mime: "image/jpeg",
   },
 ];
 
 async function main() {
   const root = process.cwd();
-  const eventsDir = path.resolve(root, "public/events");
+  const eventsV2Dir = path.resolve(root, "public/events_v2"); // resized payloads
   const targetDir = path.resolve(root, "public/ecell_packs");
-  const targetPackPath = path.join(targetDir, "events_pack.bin");
+  const targetPackPath = path.join(targetDir, "events_pack_v2.bin");
 
-  if (!fs.existsSync(eventsDir)) {
-    throw new Error(`Events directory not found at ${eventsDir}`);
+  if (!fs.existsSync(eventsV2Dir)) {
+    throw new Error(`Resized events directory not found at ${eventsV2Dir} — run: bun run resize:gallery`);
   }
 
   if (!fs.existsSync(targetDir)) {
     fs.mkdirSync(targetDir, { recursive: true });
   }
 
-  console.log("📦 Packing event images into a single binary pack...");
+  console.log("📦 Packing resized event images into a single binary pack...");
 
   const manifest: { id: string; path: string; mime: string; len: number }[] = [];
   const payloads: Buffer[] = [];
   let totalPayloadBytes = 0;
 
   for (const item of EVENTS) {
-    const filePath = path.join(eventsDir, item.fileName);
-    if (!fs.existsSync(filePath)) {
-      throw new Error(`Missing event file: ${filePath}`);
+    const ext = path.extname(item.fileName).toLowerCase();
+    const base = path.basename(item.fileName, ext);
+    const resizedPath = path.join(eventsV2Dir, `${base}.webp`);
+    if (!fs.existsSync(resizedPath)) {
+      throw new Error(`Missing resized event image for ${item.path}: ${resizedPath} — run: bun run resize:gallery`);
     }
-    const buf = fs.readFileSync(filePath);
+    const buf = fs.readFileSync(resizedPath);
     payloads.push(buf);
     totalPayloadBytes += buf.length;
     manifest.push({
       id: item.id,
       path: item.path,
-      mime: item.mime,
+      mime: "image/webp",
       len: buf.length,
     });
-    console.log(`   + ${item.fileName} (${(buf.length / 1024).toFixed(1)} KB, ${item.mime})`);
+    console.log(`   + ${item.fileName.padEnd(24)} (${(buf.length / 1024).toFixed(1)} KB, image/webp)`);
   }
 
   const manifestJson = JSON.stringify(manifest);
@@ -113,7 +122,7 @@ async function main() {
     verifyOffset += item.len;
   }
 
-  console.log("✅ Verification successful! All event images match 100% byte-for-byte.");
+  console.log("✅ Verification successful! All resized event images match 100% byte-for-byte.");
 }
 
 main().catch((err) => {

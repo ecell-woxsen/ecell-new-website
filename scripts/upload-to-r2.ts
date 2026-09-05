@@ -56,6 +56,10 @@ interface FileUploadTask {
   mimeType: string;
 }
 
+// Intermediate resized-source directories consumed by the pack scripts —
+// not served by the site, so they stay out of the bucket.
+const UPLOAD_SKIP_DIRS = new Set(["team_v2", "events_v2"]);
+
 function getAllFiles(dirPath: string, rootPath: string = dirPath): FileUploadTask[] {
   const tasks: FileUploadTask[] = [];
   const entries = fs.readdirSync(dirPath, { withFileTypes: true });
@@ -65,6 +69,7 @@ function getAllFiles(dirPath: string, rootPath: string = dirPath): FileUploadTas
     const fullPath = path.join(dirPath, entry.name);
 
     if (entry.isDirectory()) {
+      if (UPLOAD_SKIP_DIRS.has(entry.name)) continue;
       tasks.push(...getAllFiles(fullPath, rootPath));
     } else {
       const ext = path.extname(entry.name).toLowerCase();
@@ -181,10 +186,13 @@ async function main() {
     console.log("\n🔍 Running live CDN verification probe...");
     const sampleKeys = [
       "ecell-logo.png",
+      "ecell-logo-v2.webp",
       "still_shot.mp4",
       "events/hult.png",
       "ecell_packs/events_pack.bin",
+      "ecell_packs/events_pack_v2.bin",
       "ecell_packs/team_pack.bin",
+      "ecell_packs/team_pack_v2.bin",
       "team/monis.webp",
       "team/imad.webp",
       "ecell_packs/1080p/pack_000.bin",

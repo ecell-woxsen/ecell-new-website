@@ -17,7 +17,9 @@ export function loadEventsPack(): Promise<Record<string, string>> {
     return pendingPromise;
   }
 
-  const packUrl = getAssetUrl("/ecell_packs/events_pack.bin");
+  // _v2: re-encoded WebP (<=1024px) — versioned filename busts the
+  // immutable browser/edge CDN caches.
+  const packUrl = getAssetUrl("/ecell_packs/events_pack_v2.bin");
 
   pendingPromise = fetch(packUrl, { cache: "force-cache" })
     .then((res) => {

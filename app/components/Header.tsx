@@ -37,7 +37,7 @@ function Header({
             title="Return to Home"
           >
             <Image
-              src={getAssetUrl("/ecell-logo.png")}
+              src={getAssetUrl("/ecell-logo-v2.webp")}
               alt="E-Cell Logo"
               width={32}
               height={32}

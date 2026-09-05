@@ -12,6 +12,7 @@ import {
   getPhysicalFrameNumber,
   TOTAL_PHYSICAL_FRAMES,
   TOTAL_PACKS,
+  FRAMES_PER_PACK,
   getPackIndex,
   getPackFrameRange,
   getPackUrl,
@@ -56,27 +57,50 @@ const LOOKAHEAD_FORWARD = 32;
 const LOOKAHEAD_BACKWARD = 12;
 const PREFETCH_ABORT_DISTANCE = 40; // abort in-flight requests this far from the playhead
 
-// Decode pipeline: decode-ahead window aligned with the fetch corridor (the old
-// decode window [t-3, t+10] was far smaller than the fetch window, so frames
-// arrived downloaded-but-undecoded and triggered micro-stutter), with a hard
-// concurrency cap to prevent decode storms during post-warm flings.
+// Decode pipeline: dense decode-ahead window co-sized with the bitmap cap so
+// freshly decoded frames are never immediately evicted (the old mobile
+// profile decoded +24 forward against a cap of 16 — decoded-then-evicted
+// churn). Dense window + one stride anchor slot must fit inside the cap.
 const DECODE_BACK = 4;
-const DECODE_FORWARD = 16;
-const MAX_CONCURRENT_DECODES = 8;
+const DECODE_FORWARD_DESKTOP = 12; // t-4..t+12 = 17 + anchor slot = cap 18
+const DECODE_FORWARD_TABLET = 8; //  t-4..t+8  = 13 + anchor slot = cap 14
+const DECODE_FORWARD_MOBILE = 10; // t-4..t+10 = 15 + anchor slot = cap 16
+const MAX_CONCURRENT_DECODES = 6;
 
-// Bounded bitmap cache capacities (strictly limits peak RAM consumption)
-// Desktop (1080p): 24 bitmaps * 8.29MB ≈ 199MB peak RAM
-// Tablet (720p):   18 bitmaps * 3.68MB ≈ 66MB peak RAM
-// Mobile (720p):   16 bitmaps * 3.68MB ≈ 59MB peak RAM
-const MAX_BITMAP_CACHE_SIZE_DESKTOP = 24;
-const MAX_BITMAP_CACHE_SIZE_TABLET = 18;
+const getDecodeForward = (variant: AssetVariant): number =>
+  variant === "mobile_720p"
+    ? DECODE_FORWARD_MOBILE
+    : variant === "720p"
+    ? DECODE_FORWARD_TABLET
+    : DECODE_FORWARD_DESKTOP;
+
+// Bounded bitmap cache capacities (strictly limits peak RAM consumption).
+// Decoded bytes per bitmap: 1080p = 1920*1080*4 ≈ 8.29MB, 720p = 1280*720*4
+// ≈ 3.68MB, mobile_720p = 404*720*4 ≈ 1.16MB.
+// Desktop (1080p): 18 bitmaps * 8.29MB ≈ 149MB peak RAM
+// Tablet (720p):   14 bitmaps * 3.68MB ≈ 52MB peak RAM
+// Mobile (720p):   16 bitmaps * 1.16MB ≈ 19MB peak RAM
+const MAX_BITMAP_CACHE_SIZE_DESKTOP = 18;
+const MAX_BITMAP_CACHE_SIZE_TABLET = 14;
 const MAX_BITMAP_CACHE_SIZE_MOBILE = 16;
 
 const getDecodeConcurrency = (): number => {
   if (typeof window === "undefined" || typeof navigator === "undefined") return 4;
   const cores = navigator.hardwareConcurrency || 4;
-  return Math.min(8, Math.max(4, cores));
+  return Math.min(MAX_CONCURRENT_DECODES, Math.max(4, cores));
 };
+
+// ---------------------------------------------------------------------------
+// BOUNDED TIER-1 BLOB CACHE (sliding pack window)
+// ---------------------------------------------------------------------------
+// The idle streamer no longer accumulates all 840 compressed frames in RAM.
+// It warms packs within BLOB_WARM_PACK_RADIUS of the playhead, and
+// pruneBlobCache evicts packs beyond BLOB_EVICT_PACK_RADIUS. Eviction is
+// nearly free: the CDN serves immutable cache headers and every fetch uses
+// cache: "force-cache", so a re-fetch after eviction is a browser disk-cache
+// hit — no network round trip, no visible stall on scroll-back.
+const BLOB_WARM_PACK_RADIUS = 6; // idle warm corridor: ±6 packs (±96 frames)
+const BLOB_EVICT_PACK_RADIUS = 8; // hard eviction boundary: ±8 packs (±128 frames)
 
 // Failed-frame retry with exponential backoff (previously failures left
 // permanent holes that were re-fetched on every corridor pass).
@@ -133,6 +157,7 @@ const stats = {
   endpointPauses: 0,
   decodes: 0,
   decodeDrops: 0,
+  blobEvictions: 0,
 };
 if (typeof window !== "undefined") {
   (window as unknown as { __frameStats?: typeof stats }).__frameStats = stats;
@@ -263,6 +288,7 @@ function ScrollytellingEngine({
 
   // Pack batching state (Track B)
   const noPacksRef = useRef(false);
+  const lastBlobPrunePackRef = useRef(-1);
   const packInflightRef = useRef<
     Map<string, { controller: AbortController; priority: "urgent" | "idle"; packIndex: number }>
   >(new Map());
@@ -492,11 +518,61 @@ function ScrollytellingEngine({
     }
   }, []);
 
+  // =========================================================================
+  // BOUNDED DISTANCE-BASED BLOB (TIER 1) PRUNER
+  // =========================================================================
+  // Evicts compressed blobs (and their failure-isolation state) beyond
+  // BLOB_EVICT_PACK_RADIUS of the playhead, at pack granularity. Only the
+  // active variant's entries are touched — applyVariantSwitch already clears
+  // stale-variant state. In-flight frames are safe: their keys are not in the
+  // blob cache yet, and a far request that lands afterwards is re-pruned on
+  // the next pack crossing. Pack-blocker keys use the `${variant}:pack:${n}`
+  // shape, so they are distance-checked on their pack index directly.
+  const pruneBlobCache = useCallback((currentPhysical: number) => {
+    const variant = assetVariantRef.current;
+    const curPack = getPackIndex(currentPhysical);
+    const isFar = (phys: number) =>
+      Math.abs(getPackIndex(phys) - curPack) > BLOB_EVICT_PACK_RADIUS;
+
+    for (const key of blobCacheRef.current.keys()) {
+      const colon = key.indexOf(":");
+      if (key.slice(0, colon) !== variant) continue;
+      if (isFar(physOfKey(key))) {
+        blobCacheRef.current.delete(key);
+        stats.blobEvictions++;
+      }
+    }
+
+    for (const key of blockedKeysRef.current.keys()) {
+      const colon = key.indexOf(":");
+      if (key.slice(0, colon) !== variant || isFar(physOfKey(key))) {
+        blockedKeysRef.current.delete(key);
+      }
+    }
+
+    for (const key of badDecodeRef.current.keys()) {
+      const colon = key.indexOf(":");
+      if (key.slice(0, colon) !== variant || isFar(physOfKey(key))) {
+        badDecodeRef.current.delete(key);
+      }
+    }
+
+    for (const key of blockedPacksRef.current.keys()) {
+      const pIdx = parseInt(key.slice(key.lastIndexOf(":") + 1), 10);
+      if (
+        !key.startsWith(`${variant}:pack:`) ||
+        Math.abs(pIdx - curPack) > BLOB_EVICT_PACK_RADIUS
+      ) {
+        blockedPacksRef.current.delete(key);
+      }
+    }
+  }, []);
+
   const pumpDecodeQueueRef = useRef<() => void>(() => {});
 
   const pumpDecodeQueue = useCallback(() => {
     const isMobile = assetVariantRef.current === "mobile_720p";
-    const maxDecodes = isMobile ? Math.min(6, getDecodeConcurrency()) : getDecodeConcurrency();
+    const maxDecodes = isMobile ? Math.min(4, getDecodeConcurrency()) : getDecodeConcurrency();
     while (decodeInflightRef.current.size < maxDecodes && decodeQueueRef.current.length > 0) {
       const key = decodeQueueRef.current.shift()!;
       decodeQueuedRef.current.delete(key);
@@ -734,8 +810,7 @@ function ScrollytellingEngine({
             endpointGuardRef.current.pausedUntil = 0;
 
             const curPhys = getPhysicalFrameNumber(currentFrameRef.current);
-            const isMobile = variant === "mobile_720p";
-            const decodeHorizon = isMobile ? 32 : 24;
+            const decodeHorizon = getDecodeForward(variant) + DECODE_BACK;
             for (let f = start; f <= end; f++) {
               if (Math.abs(f - curPhys) <= decodeHorizon) {
                 enqueueDecode(`${variant}:${f}`);
@@ -808,6 +883,14 @@ function ScrollytellingEngine({
       // 1) Prune decoded bitmaps via bounded distance-based capacity
       pruneBitmapCache(targetPhysical);
 
+      // 1b) Prune Tier-1 blobs beyond the sliding window (throttled to pack
+      // crossings so the map scan runs once per 16 frames, not per frame)
+      const curPackIdx = getPackIndex(targetPhysical);
+      if (curPackIdx !== lastBlobPrunePackRef.current) {
+        lastBlobPrunePackRef.current = curPackIdx;
+        pruneBlobCache(targetPhysical);
+      }
+
       // 2) Stale decode queue flush during fast movement:
       // Drop queued decodes that are behind the playhead along the direction of travel
       if (absVel >= 15 && decodeQueueRef.current.length > 0) {
@@ -831,7 +914,7 @@ function ScrollytellingEngine({
 
       if (absVel < 15) {
         // Low velocity / normal reading: decode dense contiguous corridor
-        const decodeFwd = isMobile ? 24 : DECODE_FORWARD;
+        const decodeFwd = getDecodeForward(variant);
         const decodeBack = DECODE_BACK;
         for (let p = Math.max(1, targetPhysical - decodeBack); p <= Math.min(TOTAL_PHYSICAL_FRAMES, targetPhysical + decodeFwd); p++) {
           if (p !== targetPhysical) enqueueDecode(`${variant}:${p}`);
@@ -931,14 +1014,17 @@ function ScrollytellingEngine({
         loadTeamPack().catch(() => {});
       }
     },
-    [dispatchFetch, dispatchPackFetch, enqueueDecode, pruneBitmapCache]
+    [dispatchFetch, dispatchPackFetch, enqueueDecode, pruneBitmapCache, pruneBlobCache]
   );
 
   // =========================================================================
-  // BACKGROUND IDLE STREAMER
+  // BACKGROUND IDLE STREAMER (bounded sliding window)
   // =========================================================================
-  // Quietly downloads the remaining compressed WebP blobs into RAM when the
-  // user is idle (urgent pipeline empty, no active fling).
+  // Quietly warms packs within BLOB_WARM_PACK_RADIUS of the playhead when the
+  // user is idle (urgent pipeline empty, no active fling). It no longer
+  // accumulates all 840 compressed frames — pruneBlobCache keeps Tier 1
+  // bounded, and evicted packs re-fetch from the browser disk cache
+  // (immutable CDN headers + force-cache) when the playhead returns.
   const scheduleIdleStream = useCallback(() => {
     if (idleHandleRef.current !== null) return;
     if (urgentCountRef.current > 0 || urgentPackCountRef.current > 0) return;
@@ -946,13 +1032,6 @@ function ScrollytellingEngine({
     // Pre-warm the events and team packs quietly during idle periods
     loadEventsPack().catch(() => {});
     loadTeamPack().catch(() => {});
-
-    const variant = assetVariantRef.current;
-    let blobCount = 0;
-    for (const k of blobCacheRef.current.keys()) {
-      if (k.startsWith(`${variant}:`)) blobCount++;
-    }
-    if (blobCount >= TOTAL_PHYSICAL_FRAMES) return; // fully warmed
 
     idleHandleRef.current = requestIdle(() => {
       idleHandleRef.current = null;
@@ -964,21 +1043,27 @@ function ScrollytellingEngine({
         return;
       }
 
+      const variant = assetVariantRef.current;
       const curPhys = getPhysicalFrameNumber(currentFrameRef.current);
+      const warmRadiusFrames = BLOB_WARM_PACK_RADIUS * FRAMES_PER_PACK;
       let dispatched = 0;
 
       if (noPacksRef.current) {
-        // Forward corridor from playhead first, then backward to the beginning
-        for (let f = curPhys; f <= TOTAL_PHYSICAL_FRAMES && dispatched < MAX_IDLE_CONCURRENT; f++) {
+        // Per-frame mode: warm the same sliding window frame by frame
+        const warmFwd = Math.min(TOTAL_PHYSICAL_FRAMES, curPhys + warmRadiusFrames);
+        for (let f = curPhys; f <= warmFwd && dispatched < MAX_IDLE_CONCURRENT; f++) {
           if (dispatchFetch(f, "idle")) dispatched++;
         }
         if (dispatched < MAX_IDLE_CONCURRENT) {
-          for (let f = curPhys - 1; f >= 1 && dispatched < MAX_IDLE_CONCURRENT; f--) {
+          const warmBack = Math.max(1, curPhys - warmRadiusFrames);
+          for (let f = curPhys - 1; f >= warmBack && dispatched < MAX_IDLE_CONCURRENT; f--) {
             if (dispatchFetch(f, "idle")) dispatched++;
           }
         }
       } else {
         const curPack = getPackIndex(curPhys);
+        const warmLo = Math.max(0, curPack - BLOB_WARM_PACK_RADIUS);
+        const warmHi = Math.min(TOTAL_PACKS - 1, curPack + BLOB_WARM_PACK_RADIUS);
         const isPackNeeded = (pIdx: number) => {
           const { start, end } = getPackFrameRange(pIdx);
           for (let f = start; f <= end; f++) {
@@ -987,13 +1072,13 @@ function ScrollytellingEngine({
           return false;
         };
 
-        for (let p = curPack; p < TOTAL_PACKS && dispatched < MAX_IDLE_PACK_CONCURRENT; p++) {
+        for (let p = curPack; p <= warmHi && dispatched < MAX_IDLE_PACK_CONCURRENT; p++) {
           if (isPackNeeded(p)) {
             if (dispatchPackFetch(p, "idle")) dispatched++;
           }
         }
         if (dispatched < MAX_IDLE_PACK_CONCURRENT) {
-          for (let p = curPack - 1; p >= 0 && dispatched < MAX_IDLE_PACK_CONCURRENT; p--) {
+          for (let p = curPack - 1; p >= warmLo && dispatched < MAX_IDLE_PACK_CONCURRENT; p--) {
             if (isPackNeeded(p)) {
               if (dispatchPackFetch(p, "idle")) dispatched++;
             }
@@ -1122,7 +1207,9 @@ function ScrollytellingEngine({
     [enqueueDecode, findNearestLoadedKey]
   );
 
-  drawFrameToCanvasRef.current = drawFrameToCanvas;
+  useEffect(() => {
+    drawFrameToCanvasRef.current = drawFrameToCanvas;
+  }, [drawFrameToCanvas]);
 
   // =========================================================================
   // DIMENSIONS, CACHED MAX-SCROLL & ADAPTIVE VARIANT SWITCH
@@ -1168,6 +1255,7 @@ function ScrollytellingEngine({
       endpointGuardRef.current = { pausedUntil: 0, backoffMs: ENDPOINT_BACKOFF_MIN_MS, consecutive: 0 };
 
       assetVariantRef.current = next;
+      lastBlobPrunePackRef.current = -1; // force a fresh prune pass for the new variant
       lastDrawnKeyRef.current = null;
       lastDrawnFrameRef.current = -1;
       lastDrawnWidthRef.current = 0;
@@ -1294,6 +1382,7 @@ function ScrollytellingEngine({
       bitmapCacheRef.current.clear();
       blobCacheRef.current.clear();
       lastDrawnKeyRef.current = null;
+      lastBlobPrunePackRef.current = -1;
       decodeQueueRef.current.length = 0;
       decodeQueuedRef.current.clear();
       blockedKeysRef.current.clear();
@@ -1331,9 +1420,19 @@ function ScrollytellingEngine({
     let animFrameId: number;
     let debugInterval: ReturnType<typeof setInterval> | null = null;
 
-    if (new URLSearchParams(window.location.search).has("debug")) {
+    const debugParams = new URLSearchParams(window.location.search);
+    if (debugParams.has("debug") || debugParams.has("mem")) {
       debugInterval = setInterval(() => {
-        console.log("[frameStats]", {
+        // Resident-memory estimates for the two frame caches (KPI for the
+        // RAM budget work: blobs = compressed Tier 1, bitmaps = decoded Tier 2)
+        let blobBytes = 0;
+        for (const b of blobCacheRef.current.values()) blobBytes += b.size;
+        let bitmapBytes = 0;
+        for (const key of bitmapCacheRef.current.keys()) {
+          const v = key.slice(0, key.indexOf(":"));
+          bitmapBytes += v === "1080p" ? 1920 * 1080 * 4 : v === "720p" ? 1280 * 720 * 4 : 404 * 720 * 4;
+        }
+        const entry: Record<string, unknown> = {
           ...stats,
           urgent: urgentCountRef.current,
           idle: idleCountRef.current,
@@ -1341,10 +1440,17 @@ function ScrollytellingEngine({
           idlePacks: idlePackCountRef.current,
           blobs: blobCacheRef.current.size,
           bitmaps: bitmapCacheRef.current.size,
+          blobMB: (blobBytes / 1048576).toFixed(1),
+          bitmapMB: (bitmapBytes / 1048576).toFixed(1),
           blocked: blockedKeysRef.current.size,
           blockedPacks: blockedPacksRef.current.size,
           endpointPaused: Date.now() < endpointGuardRef.current.pausedUntil,
-        });
+        };
+        if (debugParams.has("mem")) {
+          const mem = (performance as Performance & { memory?: { usedJSHeapSize: number } }).memory;
+          if (mem) entry.jsHeapMB = (mem.usedJSHeapSize / 1048576).toFixed(1);
+        }
+        console.log("[frameStats]", entry);
       }, 5000);
     }
 

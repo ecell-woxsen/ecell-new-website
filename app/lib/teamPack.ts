@@ -17,7 +17,10 @@ export function loadTeamPack(): Promise<Record<string, string>> {
     return pendingPromise;
   }
 
-  const packUrl = getAssetUrl("/ecell_packs/team_pack.bin");
+  // _v2: resized (max-dim 800px) portraits — browsers decode <img> at
+  // intrinsic size, so the old ~2000px originals cost ~250MB decoded RAM.
+  // Versioned filename busts the immutable browser/edge CDN caches.
+  const packUrl = getAssetUrl("/ecell_packs/team_pack_v2.bin");
 
   pendingPromise = fetch(packUrl, { cache: "force-cache" })
     .then((res) => {

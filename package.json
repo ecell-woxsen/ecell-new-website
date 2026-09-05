@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "resize:gallery": "bun run scripts/resize-gallery-assets.ts",
     "pack:frames": "bun run scripts/pack-frames.ts",
     "pack:events": "bun run scripts/pack-events.ts",
     "pack:team": "bun run scripts/pack-team.ts",
@@ -25,7 +26,8 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.3.1",
+    "eslint-config-next": "^16",
+    "sharp": "^0.35.3",
     "tailwindcss": "^4",
     "typescript": "^5"
   },
