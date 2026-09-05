@@ -62,11 +62,21 @@ const PREFETCH_ABORT_DISTANCE = 40; // abort in-flight requests this far from th
 // concurrency cap to prevent decode storms during post-warm flings.
 const DECODE_BACK = 4;
 const DECODE_FORWARD = 16;
-const MAX_CONCURRENT_DECODES = 4;
+const MAX_CONCURRENT_DECODES = 8;
 
-// Bitmap keep window (pruned every scheduler tick)
-const KEEP_BACK = 8;
-const KEEP_FORWARD = 24;
+// Bounded bitmap cache capacities (strictly limits peak RAM consumption)
+// Desktop (1080p): 24 bitmaps * 8.29MB ≈ 199MB peak RAM
+// Tablet (720p):   18 bitmaps * 3.68MB ≈ 66MB peak RAM
+// Mobile (720p):   16 bitmaps * 3.68MB ≈ 59MB peak RAM
+const MAX_BITMAP_CACHE_SIZE_DESKTOP = 24;
+const MAX_BITMAP_CACHE_SIZE_TABLET = 18;
+const MAX_BITMAP_CACHE_SIZE_MOBILE = 16;
+
+const getDecodeConcurrency = (): number => {
+  if (typeof window === "undefined" || typeof navigator === "undefined") return 4;
+  const cores = navigator.hardwareConcurrency || 4;
+  return Math.min(8, Math.max(4, cores));
+};
 
 // Failed-frame retry with exponential backoff (previously failures left
 // permanent holes that were re-fetched on every corridor pass).
@@ -164,7 +174,12 @@ const decodeViaImageElement = (blob: Blob): Promise<FrameAsset | null> =>
 
 const decodeAsset = (blob: Blob): Promise<FrameAsset | null> => {
   if (typeof window !== "undefined" && "createImageBitmap" in window) {
-    return createImageBitmap(blob).catch(() => decodeViaImageElement(blob));
+    return createImageBitmap(blob, {
+      colorSpaceConversion: "none",
+      premultiplyAlpha: "default",
+    }).catch(() =>
+      createImageBitmap(blob).catch(() => decodeViaImageElement(blob))
+    );
   }
   return decodeViaImageElement(blob);
 };
@@ -235,10 +250,12 @@ function ScrollytellingEngine({
   const scrollVelocityRef = useRef(0);
   const maxScrollRef = useRef(1);
 
-  // Redraw/skip guards
+  // Redraw/skip guards & cache protection
   const lastDrawnFrameRef = useRef<number>(-1);
+  const lastDrawnKeyRef = useRef<string | null>(null);
   const lastDrawnWidthRef = useRef<number>(0);
   const lastDrawnHeightRef = useRef<number>(0);
+  const drawFrameToCanvasRef = useRef<((frameFloat: number) => void) | null>(null);
 
   // Change-gated style write cache (skip identical setProperty calls per frame)
   const lastCssRef = useRef<Record<string, string>>({});
@@ -428,12 +445,58 @@ function ScrollytellingEngine({
   // =========================================================================
   // DECODE PIPELINE (bounded concurrency, stale-drop, JIT jump slots)
   // =========================================================================
+  // BOUNDED DISTANCE-BASED BITMAP CACHE PRUNER
+  // =========================================================================
+  const pruneBitmapCache = useCallback((currentPhysical: number) => {
+    const variant = assetVariantRef.current;
+    const maxCapacity =
+      variant === "mobile_720p"
+        ? MAX_BITMAP_CACHE_SIZE_MOBILE
+        : variant === "720p"
+        ? MAX_BITMAP_CACHE_SIZE_TABLET
+        : MAX_BITMAP_CACHE_SIZE_DESKTOP;
+
+    // 1. Evict stale variant bitmaps first
+    for (const [key, asset] of bitmapCacheRef.current) {
+      if (!key.startsWith(`${variant}:`)) {
+        closeAsset(asset);
+        bitmapCacheRef.current.delete(key);
+      }
+    }
+
+    // 2. If within capacity, nothing to prune
+    if (bitmapCacheRef.current.size <= maxCapacity) return;
+
+    // 3. Sort entries by distance from currentPhysical (farthest first)
+    // CRITICAL: Protect lastDrawnKeyRef.current from eviction so canvas never loses its active texture
+    const protectedKey = lastDrawnKeyRef.current;
+    const candidates: Array<{ key: string; dist: number }> = [];
+
+    for (const key of bitmapCacheRef.current.keys()) {
+      if (key === protectedKey) continue;
+      const p = physOfKey(key);
+      candidates.push({ key, dist: Math.abs(p - currentPhysical) });
+    }
+
+    candidates.sort((a, b) => b.dist - a.dist);
+
+    let excess = bitmapCacheRef.current.size - maxCapacity;
+    for (let i = 0; i < candidates.length && excess > 0; i++) {
+      const k = candidates[i].key;
+      const asset = bitmapCacheRef.current.get(k);
+      if (asset) {
+        closeAsset(asset);
+        bitmapCacheRef.current.delete(k);
+        excess--;
+      }
+    }
+  }, []);
+
   const pumpDecodeQueueRef = useRef<() => void>(() => {});
 
   const pumpDecodeQueue = useCallback(() => {
     const isMobile = assetVariantRef.current === "mobile_720p";
-    const maxDecodes = isMobile ? 6 : MAX_CONCURRENT_DECODES;
-    const keepLimit = (isMobile ? 36 : KEEP_FORWARD) + 16;
+    const maxDecodes = isMobile ? Math.min(6, getDecodeConcurrency()) : getDecodeConcurrency();
     while (decodeInflightRef.current.size < maxDecodes && decodeQueueRef.current.length > 0) {
       const key = decodeQueueRef.current.shift()!;
       decodeQueuedRef.current.delete(key);
@@ -442,13 +505,13 @@ function ScrollytellingEngine({
       const variant = key.slice(0, colon);
       const phys = physOfKey(key);
 
-      // Drop stale queue entries (variant flipped, or playhead moved far past)
+      // Drop stale queue entries (variant flipped, or playhead moved far past > 60 frames)
       if (variant !== assetVariantRef.current) {
         stats.decodeDrops++;
         continue;
       }
       const curPhys = getPhysicalFrameNumber(currentFrameRef.current);
-      if (Math.abs(phys - curPhys) > keepLimit) {
+      if (Math.abs(phys - curPhys) > 60) {
         stats.decodeDrops++;
         continue;
       }
@@ -463,13 +526,18 @@ function ScrollytellingEngine({
         if (asset) {
           if (!unmountedRef.current) {
             const cur = getPhysicalFrameNumber(currentFrameRef.current);
-            if (variant === assetVariantRef.current && Math.abs(phys - cur) <= KEEP_FORWARD + 16) {
+            if (variant === assetVariantRef.current) {
               bitmapCacheRef.current.set(key, asset);
-              if (Math.abs(phys - cur) <= 1) {
-                lastDrawnFrameRef.current = -1; // fresh playhead frame — force redraw
+              pruneBitmapCache(cur);
+
+              // Immediate redraw: if decoded frame is close to playhead or canvas hasn't drawn
+              const distToCur = Math.abs(phys - cur);
+              if (distToCur <= 8 || lastDrawnFrameRef.current === -1) {
+                lastDrawnFrameRef.current = -1; // force redraw
+                drawFrameToCanvasRef.current?.(currentFrameRef.current);
               }
             } else {
-              closeAsset(asset); // stale completion — release immediately
+              closeAsset(asset); // stale variant completion — release immediately
               stats.decodeDrops++;
             }
           } else {
@@ -489,7 +557,7 @@ function ScrollytellingEngine({
         if (!unmountedRef.current) pumpDecodeQueueRef.current();
       });
     }
-  }, []);
+  }, [pruneBitmapCache]);
 
   useEffect(() => {
     pumpDecodeQueueRef.current = pumpDecodeQueue;
@@ -603,6 +671,14 @@ function ScrollytellingEngine({
 
       if (priority === "urgent") {
         if (urgentPackCountRef.current >= MAX_URGENT_PACK_CONCURRENT) {
+          // Preempt distant in-flight packs when urgent queue is saturated
+          const curPhys = getPhysicalFrameNumber(currentFrameRef.current);
+          const curPack = getPackIndex(curPhys);
+          for (const entry of packInflightRef.current.values()) {
+            if (Math.abs(entry.packIndex - curPack) > 4) {
+              entry.controller.abort();
+            }
+          }
           return false;
         }
       } else {
@@ -658,8 +734,10 @@ function ScrollytellingEngine({
             endpointGuardRef.current.pausedUntil = 0;
 
             const curPhys = getPhysicalFrameNumber(currentFrameRef.current);
+            const isMobile = variant === "mobile_720p";
+            const decodeHorizon = isMobile ? 32 : 24;
             for (let f = start; f <= end; f++) {
-              if (Math.abs(f - curPhys) <= DECODE_FORWARD) {
+              if (Math.abs(f - curPhys) <= decodeHorizon) {
                 enqueueDecode(`${variant}:${f}`);
               }
             }
@@ -722,33 +800,85 @@ function ScrollytellingEngine({
       const isForward = velocity >= -0.05;
       const dir = isForward ? 1 : -1;
       const variant = assetVariantRef.current;
+      const absVel = Math.abs(velocity);
 
       const isMobile = variant === "mobile_720p";
-      const keepForward = isMobile ? 36 : KEEP_FORWARD;
-      const decodeForward = isMobile ? 24 : DECODE_FORWARD;
       const lookaheadForward = isMobile ? 40 : LOOKAHEAD_FORWARD;
 
-      // 1) Prune decoded bitmaps outside [target-KEEP_BACK, target+keepForward]
-      for (const [key, asset] of bitmapCacheRef.current) {
-        if (!key.startsWith(`${variant}:`)) {
-          closeAsset(asset); // stale variant (defensive — flip handler clears these)
-          bitmapCacheRef.current.delete(key);
-          continue;
+      // 1) Prune decoded bitmaps via bounded distance-based capacity
+      pruneBitmapCache(targetPhysical);
+
+      // 2) Stale decode queue flush during fast movement:
+      // Drop queued decodes that are behind the playhead along the direction of travel
+      if (absVel >= 15 && decodeQueueRef.current.length > 0) {
+        const filtered: string[] = [];
+        for (const qKey of decodeQueueRef.current) {
+          const qPhys = physOfKey(qKey);
+          const isBehind = dir > 0 ? qPhys < targetPhysical - 2 : qPhys > targetPhysical + 2;
+          if (isBehind) {
+            decodeQueuedRef.current.delete(qKey);
+            stats.decodeDrops++;
+          } else {
+            filtered.push(qKey);
+          }
         }
-        const p = physOfKey(key);
-        if (p < targetPhysical - KEEP_BACK || p > targetPhysical + keepForward) {
-          closeAsset(asset);
-          bitmapCacheRef.current.delete(key);
+        decodeQueueRef.current = filtered;
+      }
+
+      // 3) Decode scheduling: Velocity-adjusted stride and projected lookahead
+      // JIT target frame first (jump queue to front)
+      enqueueDecode(`${variant}:${targetPhysical}`, true);
+
+      if (absVel < 15) {
+        // Low velocity / normal reading: decode dense contiguous corridor
+        const decodeFwd = isMobile ? 24 : DECODE_FORWARD;
+        const decodeBack = DECODE_BACK;
+        for (let p = Math.max(1, targetPhysical - decodeBack); p <= Math.min(TOTAL_PHYSICAL_FRAMES, targetPhysical + decodeFwd); p++) {
+          if (p !== targetPhysical) enqueueDecode(`${variant}:${p}`);
+        }
+        // Also enqueue stride anchors ahead [t+4, t+8, t+16]
+        for (const s of [4, 8, 16]) {
+          const anchorP = targetPhysical + s * dir;
+          if (anchorP >= 1 && anchorP <= TOTAL_PHYSICAL_FRAMES) {
+            enqueueDecode(`${variant}:${anchorP}`);
+          }
+        }
+      } else {
+        // High velocity / fast fling: calculate stride and projected lookahead
+        const stride = absVel >= 200 ? 8 : absVel >= 80 ? 4 : 2;
+        const projectedVirtual = Math.min(
+          TOTAL_FRAMES,
+          Math.max(1, Math.round(centerVirtual + velocity * 0.08))
+        );
+        const projectedPhysical = getPhysicalFrameNumber(projectedVirtual);
+        const maxDistAhead = Math.max(isMobile ? 32 : 48, Math.abs(projectedPhysical - targetPhysical) + 16);
+
+        // Reverse safety anchors in case user stops or reverses
+        for (const s of [2, 4]) {
+          const revP = targetPhysical - s * dir;
+          if (revP >= 1 && revP <= TOTAL_PHYSICAL_FRAMES) {
+            enqueueDecode(`${variant}:${revP}`);
+          }
+        }
+
+        // Stride corridor ahead in direction of travel
+        for (let step = stride; step <= maxDistAhead; step += stride) {
+          const fwdP = targetPhysical + step * dir;
+          if (fwdP >= 1 && fwdP <= TOTAL_PHYSICAL_FRAMES) {
+            enqueueDecode(`${variant}:${fwdP}`);
+          }
+        }
+
+        // Also enqueue immediate adjacent frames [targetPhysical + dir, targetPhysical + 2*dir]
+        for (const off of [1, 2]) {
+          const adjP = targetPhysical + off * dir;
+          if (adjP >= 1 && adjP <= TOTAL_PHYSICAL_FRAMES) {
+            enqueueDecode(`${variant}:${adjP}`);
+          }
         }
       }
 
-      // 2) Decode-ahead: keep the decode window aligned with the fetch corridor
-      //    (blobs for [t-4, t+decodeForward] are decoded BEFORE the playhead arrives).
-      for (let p = Math.max(1, targetPhysical - DECODE_BACK); p <= Math.min(TOTAL_PHYSICAL_FRAMES, targetPhysical + decodeForward); p++) {
-        enqueueDecode(`${variant}:${p}`);
-      }
-
-      // 3) Coarse-first fetch order: stride anchors land first so cold jumps
+      // 4) Coarse-first fetch order: stride anchors land first so cold jumps
       //    and hard flings always have a nearby anchor frame, then the dense
       //    corridor fills the gaps.
       const order: number[] = [];
@@ -801,7 +931,7 @@ function ScrollytellingEngine({
         loadTeamPack().catch(() => {});
       }
     },
-    [dispatchFetch, dispatchPackFetch, enqueueDecode]
+    [dispatchFetch, dispatchPackFetch, enqueueDecode, pruneBitmapCache]
   );
 
   // =========================================================================
@@ -911,6 +1041,10 @@ function ScrollytellingEngine({
         if (blobCacheRef.current.has(targetKey)) enqueueDecode(targetKey, true);
         drawKey = findNearestLoadedKey(targetPhysical);
       }
+      // Ultimate safety fallback: keep showing the last drawn frame instead of dropping to blank
+      if (!drawKey && lastDrawnKeyRef.current && bitmapCacheRef.current.has(lastDrawnKeyRef.current)) {
+        drawKey = lastDrawnKeyRef.current;
+      }
       if (!drawKey) return;
 
       const asset = bitmapCacheRef.current.get(drawKey);
@@ -980,12 +1114,15 @@ function ScrollytellingEngine({
       ctx.drawImage(asset, offsetX, offsetY, drawW, drawH);
 
       stats.drawn++;
+      lastDrawnKeyRef.current = drawKey;
       lastDrawnFrameRef.current = physOfKey(drawKey);
       lastDrawnWidthRef.current = width;
       lastDrawnHeightRef.current = height;
     },
     [enqueueDecode, findNearestLoadedKey]
   );
+
+  drawFrameToCanvasRef.current = drawFrameToCanvas;
 
   // =========================================================================
   // DIMENSIONS, CACHED MAX-SCROLL & ADAPTIVE VARIANT SWITCH
@@ -1031,6 +1168,7 @@ function ScrollytellingEngine({
       endpointGuardRef.current = { pausedUntil: 0, backoffMs: ENDPOINT_BACKOFF_MIN_MS, consecutive: 0 };
 
       assetVariantRef.current = next;
+      lastDrawnKeyRef.current = null;
       lastDrawnFrameRef.current = -1;
       lastDrawnWidthRef.current = 0;
       lastDrawnHeightRef.current = 0;
@@ -1155,6 +1293,7 @@ function ScrollytellingEngine({
       for (const asset of bitmapCacheRef.current.values()) closeAsset(asset);
       bitmapCacheRef.current.clear();
       blobCacheRef.current.clear();
+      lastDrawnKeyRef.current = null;
       decodeQueueRef.current.length = 0;
       decodeQueuedRef.current.clear();
       blockedKeysRef.current.clear();
