@@ -284,6 +284,8 @@ function ScrollytellingEngine({
 
   // Change-gated style write cache (skip identical setProperty calls per frame)
   const lastCssRef = useRef<Record<string, string>>({});
+  const isProgrammaticNavRef = useRef(false);
+  const targetNavigationFrameRef = useRef<number | null>(null);
   const videoPermanentlyStoppedRef = useRef(false);
 
   // Pack batching state (Track B)
@@ -531,8 +533,14 @@ function ScrollytellingEngine({
   const pruneBlobCache = useCallback((currentPhysical: number) => {
     const variant = assetVariantRef.current;
     const curPack = getPackIndex(currentPhysical);
-    const isFar = (phys: number) =>
-      Math.abs(getPackIndex(phys) - curPack) > BLOB_EVICT_PACK_RADIUS;
+    const destFrame = targetNavigationFrameRef.current;
+    const destPack = destFrame !== null && destFrame !== undefined ? getPackIndex(getPhysicalFrameNumber(destFrame)) : -1;
+
+    const isFar = (phys: number) => {
+      const pIdx = getPackIndex(phys);
+      if (destPack >= 0 && Math.abs(pIdx - destPack) <= 1) return false;
+      return Math.abs(pIdx - curPack) > BLOB_EVICT_PACK_RADIUS;
+    };
 
     for (const key of blobCacheRef.current.keys()) {
       const colon = key.indexOf(":");
@@ -750,8 +758,11 @@ function ScrollytellingEngine({
           // Preempt distant in-flight packs when urgent queue is saturated
           const curPhys = getPhysicalFrameNumber(currentFrameRef.current);
           const curPack = getPackIndex(curPhys);
+          const destFrame = targetNavigationFrameRef.current;
+          const destPack = destFrame !== null && destFrame !== undefined ? getPackIndex(getPhysicalFrameNumber(destFrame)) : -1;
+
           for (const entry of packInflightRef.current.values()) {
-            if (Math.abs(entry.packIndex - curPack) > 4) {
+            if (entry.packIndex !== destPack && Math.abs(entry.packIndex - curPack) > 4) {
               entry.controller.abort();
             }
           }
@@ -1402,18 +1413,87 @@ function ScrollytellingEngine({
     const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const isTouch = typeof window !== "undefined" && ("ontouchstart" in window || navigator.maxTouchPoints > 0);
 
+    // Speed Limiter Configuration
+    // Calibrated so fast flings cruise at a safe, smooth speed limit without skipping decodes or causing memory spikes
+    const maxDeltaPerEvent = isTouch ? 55 : 85;
+    const maxScrollLead = isTouch ? 200 : 300;
+    const maxInputSpeed = isTouch ? 1500 : 2200; // px/sec
+
+    let lastInputTime = performance.now();
+
+    const handleVirtualScroll = (data: { deltaX: number; deltaY: number; event: WheelEvent | TouchEvent }): boolean => {
+      // Horizontal or zero-delta events are unconstrained
+      if (Math.abs(data.deltaY) < 0.001) return true;
+
+      const now = performance.now();
+      const dt = Math.max(0.001, (now - lastInputTime) / 1000);
+      lastInputTime = now;
+
+      // 1. Clamp single-event spike (prevents violent wheel/trackpad flick spikes)
+      let dy = Math.sign(data.deltaY) * Math.min(Math.abs(data.deltaY), maxDeltaPerEvent);
+
+      // 2. Velocity rate limiter based on gesture arrival rate
+      const maxDeltaForDt = maxInputSpeed * dt;
+      if (Math.abs(dy) > maxDeltaForDt) {
+        dy = Math.sign(dy) * Math.max(8, maxDeltaForDt);
+      }
+
+      // 3. Scroll lead limiter: prevent queuing up runaway distance ahead of current playhead
+      if (lenisRef.current) {
+        const animated = lenisRef.current.animatedScroll;
+        const target = lenisRef.current.targetScroll;
+        const currentLead = target - animated;
+
+        // If scrolling in same direction as current lead, enforce maximum lead buffer
+        if (dy > 0 && currentLead >= 0) {
+          const headroom = maxScrollLead - currentLead;
+          if (headroom <= 0.5) {
+            data.deltaY = 0;
+            return false; // Saturated speed limit: drop excess wheel momentum
+          }
+          dy = Math.min(dy, headroom);
+        } else if (dy < 0 && currentLead <= 0) {
+          const headroom = -maxScrollLead - currentLead;
+          if (headroom >= -0.5) {
+            data.deltaY = 0;
+            return false;
+          }
+          dy = Math.max(dy, headroom);
+        }
+        // If scrolling opposite direction (user reversed scroll), allow immediately!
+      }
+
+      data.deltaY = dy;
+      return true;
+    };
+
     const lenis = new Lenis({
-      duration: prefersReducedMotion ? 0 : isTouch ? 0.65 : 0.85,
-      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+      duration: prefersReducedMotion ? 0 : isTouch ? 0.75 : 0.9,
+      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -7 * t)),
       orientation: "vertical",
       gestureOrientation: "vertical",
       smoothWheel: true,
       wheelMultiplier: 1.0,
-      touchMultiplier: isTouch ? 1.25 : 1.6,
+      touchMultiplier: isTouch ? 1.0 : 1.2,
       syncTouch: isTouch,
-      syncTouchLerp: 0.12,
+      syncTouchLerp: 0.08,
+      touchInertiaExponent: 1.1,
       infinite: false,
+      virtualScroll: handleVirtualScroll,
     });
+
+    // Guard non-programmatic scrollTo targets so touch-inertia or any internal source cannot exceed maxScrollLead
+    const originalScrollTo = lenis.scrollTo.bind(lenis);
+    lenis.scrollTo = (target: number | string | HTMLElement, options?: Parameters<typeof originalScrollTo>[1]) => {
+      if (options?.programmatic === false && typeof target === "number") {
+        const current = lenis.animatedScroll;
+        const lead = target - current;
+        if (Math.abs(lead) > maxScrollLead) {
+          target = current + Math.sign(lead) * maxScrollLead;
+        }
+      }
+      return originalScrollTo(target, options);
+    };
 
     lenisRef.current = lenis;
 
@@ -1468,13 +1548,29 @@ function ScrollytellingEngine({
       const maxScroll = maxScrollRef.current; // cached — no per-frame layout read
       const progress = maxScroll > 0 ? Math.min(1, Math.max(0, scrollY / maxScroll)) : 0;
 
-      const renderFloat = 1 + progress * (TOTAL_FRAMES - 1);
+      const targetFloat = 1 + progress * (TOTAL_FRAMES - 1);
       const prevFloat = currentFrameRef.current;
-      currentFrameRef.current = renderFloat;
 
       const now = performance.now();
       const dt = Math.min(0.05, Math.max(0.001, (now - lastTimeRef.current) / 1000));
       lastTimeRef.current = now;
+
+      // Playhead governor: ensure visual frame advancement never exceeds safe decoding rate
+      let renderFloat: number;
+      if (prefersReducedMotion) {
+        renderFloat = targetFloat;
+      } else {
+        const deltaFloat = targetFloat - prevFloat;
+        const maxFrameSpeed = isTouch ? 160 : 250; // max frames per second
+        const maxDeltaFloat = maxFrameSpeed * dt;
+        if (Math.abs(deltaFloat) > maxDeltaFloat) {
+          renderFloat = prevFloat + Math.sign(deltaFloat) * maxDeltaFloat;
+        } else {
+          renderFloat = targetFloat;
+        }
+      }
+
+      currentFrameRef.current = renderFloat;
 
       const rawVelocity = (renderFloat - prevFloat) / dt;
       // Exponential moving average for 120Hz velocity stabilization (filters 8ms RAF jitter)
@@ -1483,12 +1579,18 @@ function ScrollytellingEngine({
         : scrollVelocityRef.current * 0.6 + rawVelocity * 0.4;
       scrollVelocityRef.current = velocity;
 
-      // Priority scheduler: execute immediately when the integer frame advances,
-      // or throttle during fast flings to avoid allocating Sets/arrays 120 times/sec.
+      // Priority scheduler: execute immediately when the integer frame advances at normal speed,
+      // but throttle during fast movement/rewinds (every 40ms or 6 frames)
+      // to avoid allocating Sets/arrays and triggering redundant pack fetches 120 times/sec.
       const currentInt = Math.floor(renderFloat);
       const isIntegerAdvanced = currentInt !== lastScheduledIntegerRef.current;
       const timeSinceLastSchedule = now - lastScheduleTimeRef.current;
-      if (isIntegerAdvanced || (Math.abs(velocity) > 3 && timeSinceLastSchedule > 25)) {
+      const isFast = Math.abs(velocity) > 15;
+      const shouldSchedule = isFast
+        ? timeSinceLastSchedule >= 40 || Math.abs(currentInt - lastScheduledIntegerRef.current) >= 6
+        : isIntegerAdvanced;
+
+      if (shouldSchedule) {
         lastScheduledIntegerRef.current = currentInt;
         lastScheduleTimeRef.current = now;
         schedulePriorityBuffer(renderFloat, velocity);
@@ -1644,13 +1746,26 @@ function ScrollytellingEngine({
       const target = Math.min(TOTAL_FRAMES, Math.max(1, targetNavigationFrame));
       const targetProgress = (target - 1) / (TOTAL_FRAMES - 1);
       const targetScrollY = targetProgress * maxScrollRef.current;
+      const currentScroll = lenisRef.current.scroll;
+      const scrollDelta = Math.abs(targetScrollY - currentScroll);
+
+      targetNavigationFrameRef.current = target;
+      isProgrammaticNavRef.current = true;
+
+      // Programmatic scroll speed limit:
+      // Cap maximum travel velocity to prevent supersonic scrolling on distant section rewinds
+      const isTouchDevice = typeof window !== "undefined" && ("ontouchstart" in window || navigator.maxTouchPoints > 0);
+      const maxNavSpeed = isTouchDevice ? 1600 : 2400; // px/sec
+      const duration = Math.max(0.7, Math.min(4.5, scrollDelta / maxNavSpeed));
 
       schedulePriorityBuffer(target, 1.0);
 
       lenisRef.current.scrollTo(targetScrollY, {
-        duration: 1.2,
-        easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+        duration,
+        easing: (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2),
         onComplete: () => {
+          isProgrammaticNavRef.current = false;
+          targetNavigationFrameRef.current = null;
           lastReportedFrameRef.current = target;
           setCurrentFrame(target);
           if (onFrameUpdate) {
@@ -1666,9 +1781,28 @@ function ScrollytellingEngine({
 
   const handleExploreEvents = useCallback(() => {
     if (lenisRef.current) {
-      const targetProgress = (630 - 1) / (TOTAL_FRAMES - 1);
-      schedulePriorityBuffer(630, 1.0);
-      lenisRef.current.scrollTo(targetProgress * maxScrollRef.current, { duration: 1.2 });
+      const target = 630;
+      const targetProgress = (target - 1) / (TOTAL_FRAMES - 1);
+      const targetScrollY = targetProgress * maxScrollRef.current;
+      const currentScroll = lenisRef.current.scroll;
+      const scrollDelta = Math.abs(targetScrollY - currentScroll);
+
+      const isTouchDevice = typeof window !== "undefined" && ("ontouchstart" in window || navigator.maxTouchPoints > 0);
+      const maxNavSpeed = isTouchDevice ? 1600 : 2400;
+      const duration = Math.max(0.7, Math.min(4.5, scrollDelta / maxNavSpeed));
+
+      targetNavigationFrameRef.current = target;
+      isProgrammaticNavRef.current = true;
+      schedulePriorityBuffer(target, 1.0);
+
+      lenisRef.current.scrollTo(targetScrollY, {
+        duration,
+        easing: (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2),
+        onComplete: () => {
+          isProgrammaticNavRef.current = false;
+          targetNavigationFrameRef.current = null;
+        },
+      });
     }
   }, [schedulePriorityBuffer]);
 
