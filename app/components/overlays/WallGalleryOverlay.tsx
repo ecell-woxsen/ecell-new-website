@@ -22,8 +22,10 @@ function WallGalleryOverlay({
   // Measured ONCE on resize/mount, NEVER during scrolling (zero layout reflows)
   const eventCentersRef = useRef<number[]>([]);
   const teamCentersRef = useRef<number[]>([]);
+  const contactCenterRef = useRef<number>(0);
   const activeEventIdxRef = useRef<number>(0);
   const activeTeamIdxRef = useRef<number>(0);
+  const isContactActiveRef = useRef<boolean>(false);
 
   useEffect(() => {
     const updateGeometry = () => {
@@ -53,6 +55,12 @@ function WallGalleryOverlay({
         const r = item.getBoundingClientRect();
         return r.left - trackLeft + r.width / 2;
       });
+
+      const contactSection = track.querySelector<HTMLElement>(".gallery-contact-section");
+      if (contactSection) {
+        const r = contactSection.getBoundingClientRect();
+        contactCenterRef.current = r.left - trackLeft + r.width / 2;
+      }
     };
 
     updateGeometry();
@@ -72,6 +80,7 @@ function WallGalleryOverlay({
     let lastCheck = 0;
     let cachedEventCards: HTMLElement[] | null = null;
     let cachedTeamItems: HTMLElement[] | null = null;
+    let cachedContactSection: HTMLElement | null = null;
 
     const updateActiveCards = (time: number) => {
       rafId = requestAnimationFrame(updateActiveCards);
@@ -130,13 +139,14 @@ function WallGalleryOverlay({
 
       // 2. Team Section: Find closest team column or hero using cached geometry
       const teamCenters = teamCentersRef.current;
+      let closestTeamIdx = 0;
+      let minTeamDist = Infinity;
+
       if (teamCenters.length > 0) {
         if (!cachedTeamItems || cachedTeamItems.length === 0) {
           cachedTeamItems = Array.from(track.querySelectorAll<HTMLElement>(".gallery-team-item"));
         }
 
-        let closestTeamIdx = 0;
-        let minTeamDist = Infinity;
         for (let i = 0; i < teamCenters.length; i++) {
           const dist = Math.abs(tx + teamCenters[i] - screenCenter);
           if (dist < minTeamDist) {
@@ -144,18 +154,47 @@ function WallGalleryOverlay({
             closestTeamIdx = i;
           }
         }
+      }
 
-        if (closestTeamIdx !== activeTeamIdxRef.current && cachedTeamItems.length > 0) {
-          activeTeamIdxRef.current = closestTeamIdx;
+      // 3. Contact Section: Detect when Contact arrives in view or reaches end of track
+      const contactCenter = contactCenterRef.current;
+      let isContactActive = false;
+
+      if (contactCenter > 0) {
+        const distToContact = Math.abs(tx + contactCenter - screenCenter);
+        // Contact is active when it's closer to the screen center than any team item
+        // or within 650px of the screen center
+        isContactActive = distToContact < minTeamDist || distToContact < 650;
+
+        if (isContactActive !== isContactActiveRef.current) {
+          isContactActiveRef.current = isContactActive;
+          if (!cachedContactSection) {
+            cachedContactSection = track.querySelector<HTMLElement>(".gallery-contact-section");
+          }
+          if (cachedContactSection) {
+            cachedContactSection.setAttribute("data-active", isContactActive ? "true" : "false");
+          }
+        }
+      }
+
+      // If Contact is active, deactivate all team items so focus is unambiguous
+      if (isContactActive) {
+        if (activeTeamIdxRef.current !== -1 && cachedTeamItems && cachedTeamItems.length > 0) {
+          activeTeamIdxRef.current = -1;
           for (let i = 0; i < cachedTeamItems.length; i++) {
-            const item = cachedTeamItems[i];
-            const isActive = i === closestTeamIdx;
-            const cur = item.getAttribute("data-active");
-            if (isActive && cur !== "true") {
-              item.setAttribute("data-active", "true");
-            } else if (!isActive && cur !== "false") {
-              item.setAttribute("data-active", "false");
-            }
+            cachedTeamItems[i].setAttribute("data-active", "false");
+          }
+        }
+      } else if (teamCenters.length > 0 && closestTeamIdx !== activeTeamIdxRef.current && cachedTeamItems && cachedTeamItems.length > 0) {
+        activeTeamIdxRef.current = closestTeamIdx;
+        for (let i = 0; i < cachedTeamItems.length; i++) {
+          const item = cachedTeamItems[i];
+          const isActive = i === closestTeamIdx;
+          const cur = item.getAttribute("data-active");
+          if (isActive && cur !== "true") {
+            item.setAttribute("data-active", "true");
+          } else if (!isActive && cur !== "false") {
+            item.setAttribute("data-active", "false");
           }
         }
       }

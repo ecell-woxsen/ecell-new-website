@@ -1955,7 +1955,11 @@ function ScrollytellingEngine({
         (lastReportedFrameRef.current < 840 && roundedFrame >= 840) ||
         (lastReportedFrameRef.current >= 840 && roundedFrame < 840) ||
         (lastReportedFrameRef.current < 1140 && roundedFrame >= 1140) ||
-        (lastReportedFrameRef.current >= 1140 && roundedFrame < 1140);
+        (lastReportedFrameRef.current >= 1140 && roundedFrame < 1140) ||
+        (lastReportedFrameRef.current < 1200 && roundedFrame >= 1200) ||
+        (lastReportedFrameRef.current >= 1200 && roundedFrame < 1200) ||
+        (lastReportedFrameRef.current < 1260 && roundedFrame >= 1260) ||
+        (lastReportedFrameRef.current >= 1260 && roundedFrame < 1260);
 
       // Section tracking for Header navigation highlights
       const prevSection =
@@ -1969,8 +1973,9 @@ function ScrollytellingEngine({
         roundedFrame >= 598 ? 2 :
         roundedFrame >= 365 && roundedFrame < 450 ? 1 : 0;
       const isSectionChanged = prevSection !== nextSection;
+      const isAtEnd = roundedFrame >= TOTAL_FRAMES && lastReportedFrameRef.current !== TOTAL_FRAMES;
 
-      if (isBoundaryCrossed || isSectionChanged) {
+      if (isBoundaryCrossed || isSectionChanged || isAtEnd) {
         const reportedFrame = roundedFrame <= 1 ? 1 : roundedFrame;
         lastReportedFrameRef.current = reportedFrame;
         setCurrentFrame(reportedFrame);

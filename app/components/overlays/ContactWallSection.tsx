@@ -20,23 +20,13 @@ export default function ContactWallSection({
     setSent(true);
   };
 
-  // Scroll-driven lighting & reveal interpolation
-  // Core Team ends ~1110. Transition corridor: 1110 -> 1220. Stable hero at 1220+
-  const progress = Math.min(1, Math.max(0, (currentFrame - 1100) / 120));
-  
-  // Overhead studio lighting intensity
-  const lightIntensity = Math.min(1, Math.max(0.2, progress));
-  
-  // Luxury subtle motion: maximum 16px drift
-  const revealY = (1 - progress) * 14;
-  const sectionOpacity = Math.min(1, Math.max(0.4, 0.4 + progress * 0.6));
+  const isEndReached = currentFrame >= 1200;
 
   return (
     <div
-      className="relative shrink-0 flex flex-col justify-center w-[85vw] max-w-[1200px] select-none transition-opacity duration-300 ease-out py-6"
+      className="gallery-contact-section relative shrink-0 flex flex-col justify-center w-[85vw] max-w-[1200px] select-none py-6"
+      data-active={isEndReached ? "true" : "false"}
       style={{
-        opacity: sectionOpacity,
-        transform: `translate3d(0, ${revealY}px, 0)`,
         contain: "layout style",
       }}
     >
@@ -45,9 +35,8 @@ export default function ContactWallSection({
       {/* High WCAG contrast behind text & form, maintaining concrete wall visibility*/}
       {/* ========================================================================= */}
       <div
-        className="absolute -inset-10 pointer-events-none rounded-3xl transition-opacity duration-500"
+        className="contact-softbox absolute -inset-10 pointer-events-none rounded-3xl"
         style={{
-          opacity: lightIntensity,
           background: `
             radial-gradient(ellipse at 20% 50%, rgba(3, 6, 10, 0.85) 0%, rgba(3, 6, 10, 0.55) 50%, transparent 80%),
             radial-gradient(ellipse at 80% 50%, rgba(3, 6, 10, 0.85) 0%, rgba(3, 6, 10, 0.55) 50%, transparent 80%),
