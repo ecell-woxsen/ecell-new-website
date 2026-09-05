@@ -281,7 +281,9 @@ function ScrollytellingEngine({
 
   // Redraw/skip guards & cache protection
   const lastDrawnFrameRef = useRef<number>(-1);
+  const lastDrawnFloatRef = useRef<number | null>(null);
   const lastDrawnKeyRef = useRef<string | null>(null);
+  const lastDrawnKeyBRef = useRef<string | null>(null);
   const lastDrawnWidthRef = useRef<number>(0);
   const lastDrawnHeightRef = useRef<number>(0);
   const drawFrameToCanvasRef = useRef<((frameFloat: number) => void) | null>(null);
@@ -520,13 +522,14 @@ function ScrollytellingEngine({
     if (bitmapCacheRef.current.size <= maxCapacity) return;
 
     // 3. Sort entries by distance from currentPhysical (farthest first)
-    // CRITICAL: Protect lastDrawnKeyRef.current from eviction so canvas never loses its active texture
-    const protectedKey = lastDrawnKeyRef.current;
+    // CRITICAL: Protect active textures from eviction so canvas never loses its active blend textures
+    const protectedKeyA = lastDrawnKeyRef.current;
+    const protectedKeyB = lastDrawnKeyBRef.current;
     const candidates: Array<{ key: string; dist: number }> = [];
     const inWallLoop = currentPhysical >= WALL_LOOP_START && currentPhysical <= WALL_LOOP_END;
 
     for (const key of bitmapCacheRef.current.keys()) {
-      if (key === protectedKey) continue;
+      if (key === protectedKeyA || key === protectedKeyB) continue;
       const p = physOfKey(key);
       let dist = Math.abs(p - currentPhysical);
       if (inWallLoop && p >= WALL_LOOP_START && p <= WALL_LOOP_END) {
@@ -1193,43 +1196,67 @@ function ScrollytellingEngine({
       if (!canvas) return;
 
       const clamped = Math.min(TOTAL_FRAMES, Math.max(1, frameFloat));
-      let targetInt = Math.round(clamped);
-
-      // Only throttle blits on extreme runaway flings (> 550 frames/s) to relieve GPU;
-      // Normal/brisk trackpad scrolling retains 100% 60fps/120fps 1:1 frame pacing.
       const absVel = Math.abs(scrollVelocityRef.current);
-      if (absVel > 550) {
-        targetInt = Math.max(1, targetInt - (targetInt % 2));
-      }
 
-      const targetPhysical = getPhysicalFrameNumber(targetInt);
+      // Sub-frame Hermite smoothstep cross-fade calculation
+      const frameA = Math.floor(clamped);
+      const frameB = Math.min(TOTAL_FRAMES, frameA + 1);
+      const rawAlpha = clamped - frameA;
+      // Hermite smoothstep interpolation (3t^2 - 2t^3) for smooth 60fps/120fps motion
+      const blendAlpha = rawAlpha * rawAlpha * (3 - 2 * rawAlpha);
+
+      const targetPhysicalA = getPhysicalFrameNumber(frameA);
+      const targetPhysicalB = getPhysicalFrameNumber(frameB);
       const variant = assetVariantRef.current;
-      const targetKey = `${variant}:${targetPhysical}`;
+      const targetKeyA = `${variant}:${targetPhysicalA}`;
+      const targetKeyB = `${variant}:${targetPhysicalB}`;
 
-      let drawKey: string | null = targetKey;
-      if (!bitmapCacheRef.current.has(drawKey)) {
+      // Resolve Base Frame A
+      let drawKeyA: string | null = targetKeyA;
+      if (!bitmapCacheRef.current.has(drawKeyA)) {
         // JIT decode for the exact playhead frame — jumps the decode queue
-        if (blobCacheRef.current.has(targetKey)) enqueueDecode(targetKey, true);
-        drawKey = findNearestLoadedKey(targetPhysical);
+        if (blobCacheRef.current.has(targetKeyA)) enqueueDecode(targetKeyA, true);
+        drawKeyA = findNearestLoadedKey(targetPhysicalA);
       }
       // Ultimate safety fallback: keep showing the last drawn frame instead of dropping to blank
-      if (!drawKey && lastDrawnKeyRef.current && bitmapCacheRef.current.has(lastDrawnKeyRef.current)) {
-        drawKey = lastDrawnKeyRef.current;
+      if (!drawKeyA && lastDrawnKeyRef.current && bitmapCacheRef.current.has(lastDrawnKeyRef.current)) {
+        drawKeyA = lastDrawnKeyRef.current;
       }
-      if (!drawKey) return;
+      if (!drawKeyA) return;
 
-      const asset = bitmapCacheRef.current.get(drawKey);
-      if (!asset) return;
+      const assetA = bitmapCacheRef.current.get(drawKeyA);
+      if (!assetA) return;
+
+      // Resolve Next Frame B (cross-fade target)
+      let drawKeyB: string | null = null;
+      let assetB: ImageBitmap | HTMLImageElement | null = null;
+      const shouldBlend = blendAlpha > 0.01 && absVel <= 350 && targetPhysicalA !== targetPhysicalB;
+
+      if (shouldBlend) {
+        if (bitmapCacheRef.current.has(targetKeyB)) {
+          drawKeyB = targetKeyB;
+          assetB = bitmapCacheRef.current.get(targetKeyB) || null;
+        } else {
+          // If blob is available, enqueue decode so it's ready for subsequent subframe ticks
+          if (blobCacheRef.current.has(targetKeyB)) {
+            enqueueDecode(targetKeyB, false);
+          }
+        }
+      }
 
       // KPI: stale draw = drawn frame more than 2 frames from scroll target
-      if (Math.abs(physOfKey(drawKey) - targetPhysical) > 2) stats.staleDraws++;
+      if (Math.abs(physOfKey(drawKeyA) - targetPhysicalA) > 2) stats.staleDraws++;
 
       const width = windowWidthRef.current || window.innerWidth;
       const height = windowHeightRef.current || window.innerHeight;
 
-      // Skip redundant GPU blits when frame + dimensions unchanged (60Hz & 120Hz win)
+      // Skip redundant GPU blits when subframe position + keys + dimensions are unchanged
+      const lastFloat = lastDrawnFloatRef.current;
       if (
-        physOfKey(drawKey) === lastDrawnFrameRef.current &&
+        lastFloat !== null &&
+        Math.abs(frameFloat - lastFloat) < 0.002 &&
+        drawKeyA === lastDrawnKeyRef.current &&
+        drawKeyB === lastDrawnKeyBRef.current &&
         width === lastDrawnWidthRef.current &&
         height === lastDrawnHeightRef.current
       ) {
@@ -1259,8 +1286,8 @@ function ScrollytellingEngine({
       }
       if (!ctx) return;
 
-      const imgWidth = "naturalWidth" in asset && asset.naturalWidth ? asset.naturalWidth : asset.width;
-      const imgHeight = "naturalHeight" in asset && asset.naturalHeight ? asset.naturalHeight : asset.height;
+      const imgWidth = "naturalWidth" in assetA && assetA.naturalWidth ? assetA.naturalWidth : assetA.width;
+      const imgHeight = "naturalHeight" in assetA && assetA.naturalHeight ? assetA.naturalHeight : assetA.height;
       if (!imgWidth || !imgHeight) return;
 
       const imgRatio = imgWidth / imgHeight;
@@ -1283,18 +1310,32 @@ function ScrollytellingEngine({
 
       ctx.globalAlpha = 1.0;
       try {
-        ctx.drawImage(asset, offsetX, offsetY, drawW, drawH);
+        ctx.drawImage(assetA, offsetX, offsetY, drawW, drawH);
+
+        // Sub-frame Hermite cross-dissolve blend with Frame B if available
+        if (assetB && drawKeyB && drawKeyB !== drawKeyA && blendAlpha > 0.01) {
+          ctx.globalAlpha = blendAlpha;
+          ctx.drawImage(assetB, offsetX, offsetY, drawW, drawH);
+          ctx.globalAlpha = 1.0;
+        }
 
         stats.drawn++;
-        lastDrawnKeyRef.current = drawKey;
-        lastDrawnFrameRef.current = physOfKey(drawKey);
+        lastDrawnKeyRef.current = drawKeyA;
+        lastDrawnKeyBRef.current = assetB && drawKeyB ? drawKeyB : null;
+        lastDrawnFrameRef.current = physOfKey(drawKeyA);
+        lastDrawnFloatRef.current = frameFloat;
         lastDrawnWidthRef.current = width;
         lastDrawnHeightRef.current = height;
       } catch (err) {
         // If an asset was closed or detached, evict from cache to prevent crash and allow re-decode
-        if (drawKey) {
-          bitmapCacheRef.current.delete(drawKey);
+        if (drawKeyA) {
+          bitmapCacheRef.current.delete(drawKeyA);
         }
+        if (drawKeyB) {
+          bitmapCacheRef.current.delete(drawKeyB);
+        }
+      } finally {
+        ctx.globalAlpha = 1.0;
       }
     },
     [enqueueDecode, findNearestLoadedKey]
@@ -1563,10 +1604,10 @@ function ScrollytellingEngine({
     const isTouch = typeof window !== "undefined" && ("ontouchstart" in window || navigator.maxTouchPoints > 0);
 
     // Speed Limiter Configuration
-    // Calibrated so fast flings cruise at a safe, smooth speed limit without skipping decodes or causing memory spikes
-    const maxDeltaPerEvent = isTouch ? 55 : 85;
-    const maxScrollLead = isTouch ? 200 : 300;
-    const maxInputSpeed = isTouch ? 1500 : 2200; // px/sec
+    // Calibrated so scrolling feels responsive, agile, and fluid while preventing runaway flings
+    const maxDeltaPerEvent = isTouch ? 90 : 160;
+    const maxScrollLead = isTouch ? 400 : 650;
+    const maxInputSpeed = isTouch ? 2400 : 3600; // px/sec
 
     let lastInputTime = performance.now();
 
@@ -1603,21 +1644,21 @@ function ScrollytellingEngine({
         const target = lenisRef.current.targetScroll;
         const currentLead = target - animated;
 
-        // If scrolling in same direction as current lead, enforce maximum lead buffer
+        // If scrolling in same direction as current lead, enforce maximum lead buffer smoothly
         if (dy > 0 && currentLead >= 0) {
-          const headroom = maxScrollLead - currentLead;
-          if (headroom <= 0.5) {
-            data.deltaY = 0;
-            return false; // Saturated speed limit: drop excess wheel momentum
-          }
+          const headroom = Math.max(0, maxScrollLead - currentLead);
           dy = Math.min(dy, headroom);
+          if (dy < 0.1) {
+            data.deltaY = 0;
+            return false; // Lead buffer saturated: absorb excess runaway fling
+          }
         } else if (dy < 0 && currentLead <= 0) {
-          const headroom = -maxScrollLead - currentLead;
-          if (headroom >= -0.5) {
+          const headroom = Math.min(0, -maxScrollLead - currentLead);
+          dy = Math.max(dy, headroom);
+          if (dy > -0.1) {
             data.deltaY = 0;
             return false;
           }
-          dy = Math.max(dy, headroom);
         }
         // If scrolling opposite direction (user reversed scroll), allow immediately!
       }
@@ -1627,13 +1668,13 @@ function ScrollytellingEngine({
     };
 
     const lenis = new Lenis({
-      duration: prefersReducedMotion ? 0 : isTouch ? 0.75 : 0.9,
+      duration: prefersReducedMotion ? 0 : isTouch ? 0.65 : 0.75,
       easing: (t) => Math.min(1, 1.001 - Math.pow(2, -7 * t)),
       orientation: "vertical",
       gestureOrientation: "vertical",
       smoothWheel: true,
       wheelMultiplier: 1.0,
-      touchMultiplier: isTouch ? 1.0 : 1.2,
+      touchMultiplier: isTouch ? 1.0 : 1.1,
       syncTouch: isTouch,
       syncTouchLerp: 0.08,
       touchInertiaExponent: 1.1,
