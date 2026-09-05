@@ -260,9 +260,9 @@ export default function TeamWallSection({
     });
   }, []);
 
-  // Frame-range culling: Only mount heavy image decodes when near or inside the gallery
-  // When user is at Hero/About (frame < 650), unmount images to free GPU textures completely
-  const shouldRenderImages = currentFrame >= 650 && currentFrame <= 1262;
+  // Frame-range culling: Mount images when entering the wall gallery (frame >= 598)
+  // Pre-warmed pack blobs decode smoothly before user scrolls to the team section
+  const shouldRenderImages = currentFrame >= 598 && currentFrame <= 1262;
 
   const resolveImage = (imagePath?: string): string | undefined => {
     if (!imagePath || !shouldRenderImages) return undefined;
@@ -328,7 +328,8 @@ export default function TeamWallSection({
 
       {/* HERO DUO: PRESIDENT & VICE PRESIDENT */}
       <div
-        className="gallery-team-item gallery-team-hero relative shrink-0 flex items-end gap-10 sm:gap-14 lg:gap-18 will-change-transform"
+        className="gallery-team-item gallery-team-hero relative shrink-0 flex items-end gap-10 sm:gap-14 lg:gap-18"
+        style={{ contain: "layout style" }}
         data-active="true"
       >
         {/* President: Dominant Hero Portrait */}
@@ -388,7 +389,8 @@ export default function TeamWallSection({
           <div
             key={grp.id}
             data-active="false"
-            className="gallery-team-item gallery-team-col relative shrink-0 flex flex-col justify-end w-[185px] sm:w-[215px] lg:w-[245px] h-[520px] sm:h-[580px] lg:h-[620px] will-change-transform"
+            className="gallery-team-item gallery-team-col relative shrink-0 flex flex-col justify-end w-[185px] sm:w-[215px] lg:w-[245px] h-[520px] sm:h-[580px] lg:h-[620px]"
+            style={{ contain: "layout style" }}
           >
             {/* Department Index Header */}
             <div className="flex items-center gap-2 h-5 mb-3">

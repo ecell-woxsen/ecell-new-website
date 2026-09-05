@@ -16,6 +16,9 @@ import {
   getPackIndex,
   getPackFrameRange,
   getPackUrl,
+  WALL_LOOP_START,
+  WALL_LOOP_END,
+  WALL_LOOP_LENGTH,
   type AssetVariant,
 } from "../lib/assets";
 import { loadEventsPack } from "../lib/eventsPack";
@@ -48,6 +51,11 @@ const MAX_IDLE_CONCURRENT = 2; // idle streamer runs only when zero urgent reque
 const MAX_URGENT_PACK_CONCURRENT = 3;
 const MAX_IDLE_PACK_CONCURRENT = 1;
 
+// Wall Loop Physical Pack Bounds (Packs 39 to 52 cover physical frames 625 to 840)
+const WALL_PACK_START = getPackIndex(WALL_LOOP_START);
+const WALL_PACK_END = getPackIndex(WALL_LOOP_END);
+const WALL_PACK_COUNT = WALL_PACK_END - WALL_PACK_START + 1;
+
 
 // Coarse-first corridor: fetch stride anchors (t, +/-4, +/-8, +/-16, +/-32)
 // before filling the gaps, so a cold fling or nav jump always lands within
@@ -57,15 +65,13 @@ const LOOKAHEAD_FORWARD = 32;
 const LOOKAHEAD_BACKWARD = 12;
 const PREFETCH_ABORT_DISTANCE = 40; // abort in-flight requests this far from the playhead
 
-// Decode pipeline: dense decode-ahead window co-sized with the bitmap cap so
-// freshly decoded frames are never immediately evicted (the old mobile
-// profile decoded +24 forward against a cap of 16 — decoded-then-evicted
-// churn). Dense window + one stride anchor slot must fit inside the cap.
-const DECODE_BACK = 4;
-const DECODE_FORWARD_DESKTOP = 12; // t-4..t+12 = 17 + anchor slot = cap 18
-const DECODE_FORWARD_TABLET = 8; //  t-4..t+8  = 13 + anchor slot = cap 14
-const DECODE_FORWARD_MOBILE = 10; // t-4..t+10 = 15 + anchor slot = cap 16
-const MAX_CONCURRENT_DECODES = 6;
+// Decode pipeline: expanded decode-ahead window ensures continuous 60fps/120fps
+// without playhead starvation or repetitive decode/evict churn.
+const DECODE_BACK = 6;
+const DECODE_FORWARD_DESKTOP = 28; // t-6..t+28 = 35-frame headroom ahead
+const DECODE_FORWARD_TABLET = 18;
+const DECODE_FORWARD_MOBILE = 14;
+const MAX_CONCURRENT_DECODES = 8;
 
 const getDecodeForward = (variant: AssetVariant): number =>
   variant === "mobile_720p"
@@ -74,15 +80,13 @@ const getDecodeForward = (variant: AssetVariant): number =>
     ? DECODE_FORWARD_TABLET
     : DECODE_FORWARD_DESKTOP;
 
-// Bounded bitmap cache capacities (strictly limits peak RAM consumption).
-// Decoded bytes per bitmap: 1080p = 1920*1080*4 ≈ 8.29MB, 720p = 1280*720*4
-// ≈ 3.68MB, mobile_720p = 404*720*4 ≈ 1.16MB.
-// Desktop (1080p): 18 bitmaps * 8.29MB ≈ 149MB peak RAM
-// Tablet (720p):   14 bitmaps * 3.68MB ≈ 52MB peak RAM
-// Mobile (720p):   16 bitmaps * 1.16MB ≈ 19MB peak RAM
-const MAX_BITMAP_CACHE_SIZE_DESKTOP = 18;
-const MAX_BITMAP_CACHE_SIZE_TABLET = 14;
-const MAX_BITMAP_CACHE_SIZE_MOBILE = 16;
+// Bounded bitmap cache capacities (calibrated for high-framerate fluidity).
+// Desktop (1080p): 38 bitmaps * 8.29MB ≈ 315MB peak RAM
+// Tablet (720p):   26 bitmaps * 3.68MB ≈ 95MB peak RAM
+// Mobile (720p):   22 bitmaps * 1.16MB ≈ 25MB peak RAM
+const MAX_BITMAP_CACHE_SIZE_DESKTOP = 38;
+const MAX_BITMAP_CACHE_SIZE_TABLET = 26;
+const MAX_BITMAP_CACHE_SIZE_MOBILE = 22;
 
 const getDecodeConcurrency = (): number => {
   if (typeof window === "undefined" || typeof navigator === "undefined") return 4;
@@ -519,11 +523,17 @@ function ScrollytellingEngine({
     // CRITICAL: Protect lastDrawnKeyRef.current from eviction so canvas never loses its active texture
     const protectedKey = lastDrawnKeyRef.current;
     const candidates: Array<{ key: string; dist: number }> = [];
+    const inWallLoop = currentPhysical >= WALL_LOOP_START && currentPhysical <= WALL_LOOP_END;
 
     for (const key of bitmapCacheRef.current.keys()) {
       if (key === protectedKey) continue;
       const p = physOfKey(key);
-      candidates.push({ key, dist: Math.abs(p - currentPhysical) });
+      let dist = Math.abs(p - currentPhysical);
+      if (inWallLoop && p >= WALL_LOOP_START && p <= WALL_LOOP_END) {
+        const loopDist = Math.abs(p - currentPhysical);
+        dist = Math.min(loopDist, WALL_LOOP_LENGTH - loopDist);
+      }
+      candidates.push({ key, dist });
     }
 
     candidates.sort((a, b) => b.dist - a.dist);
@@ -555,10 +565,17 @@ function ScrollytellingEngine({
     const curPack = getPackIndex(currentPhysical);
     const destFrame = targetNavigationFrameRef.current;
     const destPack = destFrame !== null && destFrame !== undefined ? getPackIndex(getPhysicalFrameNumber(destFrame)) : -1;
+    const inWallLoop = curPack >= WALL_PACK_START && curPack <= WALL_PACK_END;
 
     const isFar = (phys: number) => {
       const pIdx = getPackIndex(phys);
       if (destPack >= 0 && Math.abs(pIdx - destPack) <= 1) return false;
+
+      // Keep wall loop packs (39-52) resident in Tier-1 blob cache while user is in or around the wall sequence
+      if (inWallLoop && pIdx >= WALL_PACK_START && pIdx <= WALL_PACK_END) {
+        return false;
+      }
+
       return Math.abs(pIdx - curPack) > BLOB_EVICT_PACK_RADIUS;
     };
 
@@ -615,7 +632,12 @@ function ScrollytellingEngine({
         continue;
       }
       const curPhys = getPhysicalFrameNumber(currentFrameRef.current);
-      if (Math.abs(phys - curPhys) > 60) {
+      let distFromCur = Math.abs(phys - curPhys);
+      if (curPhys >= WALL_LOOP_START && curPhys <= WALL_LOOP_END && phys >= WALL_LOOP_START && phys <= WALL_LOOP_END) {
+        const direct = Math.abs(phys - curPhys);
+        distFromCur = Math.min(direct, WALL_LOOP_LENGTH - direct);
+      }
+      if (distFromCur > 80) {
         stats.decodeDrops++;
         continue;
       }
@@ -635,8 +657,12 @@ function ScrollytellingEngine({
               pruneBitmapCache(cur);
 
               // Immediate redraw: if decoded frame is close to playhead or canvas hasn't drawn
-              const distToCur = Math.abs(phys - cur);
-              if (distToCur <= 8 || lastDrawnFrameRef.current === -1) {
+              let distToCur = Math.abs(phys - cur);
+              if (cur >= WALL_LOOP_START && cur <= WALL_LOOP_END && phys >= WALL_LOOP_START && phys <= WALL_LOOP_END) {
+                const direct = Math.abs(phys - cur);
+                distToCur = Math.min(direct, WALL_LOOP_LENGTH - direct);
+              }
+              if (distToCur <= 12 || lastDrawnFrameRef.current === -1) {
                 lastDrawnFrameRef.current = -1; // force redraw
                 drawFrameToCanvasRef.current?.(currentFrameRef.current);
               }
@@ -689,11 +715,17 @@ function ScrollytellingEngine({
     let bestKey: string | null = null;
     let bestDist = Infinity;
     let bestPreceding = false;
+    const inWallLoop = targetPhysical >= WALL_LOOP_START && targetPhysical <= WALL_LOOP_END;
+
     for (const [key] of bitmapCacheRef.current) {
       const colon = key.indexOf(":");
       if (key.slice(0, colon) !== variant) continue;
       const p = physOfKey(key);
-      const dist = Math.abs(p - targetPhysical);
+      let dist = Math.abs(p - targetPhysical);
+      if (inWallLoop && p >= WALL_LOOP_START && p <= WALL_LOOP_END) {
+        const loopDist = Math.abs(p - targetPhysical);
+        dist = Math.min(loopDist, WALL_LOOP_LENGTH - loopDist);
+      }
       const preceding = p <= targetPhysical;
       if (
         dist < bestDist ||
@@ -925,10 +957,17 @@ function ScrollytellingEngine({
       // 2) Stale decode queue flush during fast movement:
       // Drop queued decodes that are behind the playhead along the direction of travel
       if (absVel >= 15 && decodeQueueRef.current.length > 0) {
+        const inLoop = targetPhysical >= WALL_LOOP_START && targetPhysical <= WALL_LOOP_END;
         const filtered: string[] = [];
         for (const qKey of decodeQueueRef.current) {
           const qPhys = physOfKey(qKey);
-          const isBehind = dir > 0 ? qPhys < targetPhysical - 2 : qPhys > targetPhysical + 2;
+          let isBehind = false;
+          if (inLoop && qPhys >= WALL_LOOP_START && qPhys <= WALL_LOOP_END) {
+            const fwdDist = (qPhys - targetPhysical + WALL_LOOP_LENGTH) % WALL_LOOP_LENGTH;
+            isBehind = dir > 0 ? (fwdDist > WALL_LOOP_LENGTH - 4 && fwdDist < WALL_LOOP_LENGTH) : (fwdDist > 4 && fwdDist < WALL_LOOP_LENGTH / 2);
+          } else {
+            isBehind = dir > 0 ? qPhys < targetPhysical - 2 : qPhys > targetPhysical + 2;
+          }
           if (isBehind) {
             decodeQueuedRef.current.delete(qKey);
             stats.decodeDrops++;
@@ -945,49 +984,54 @@ function ScrollytellingEngine({
 
       if (absVel < 15) {
         // Low velocity / normal reading: decode dense contiguous corridor
+        // Step along virtual timeline so circular wall loop naturally wraps physical frames!
         const decodeFwd = getDecodeForward(variant);
         const decodeBack = DECODE_BACK;
-        for (let p = Math.max(1, targetPhysical - decodeBack); p <= Math.min(TOTAL_PHYSICAL_FRAMES, targetPhysical + decodeFwd); p++) {
-          if (p !== targetPhysical) enqueueDecode(`${variant}:${p}`);
+        for (let step = 1; step <= decodeFwd; step++) {
+          const v = centerVirtual + step * dir;
+          if (v >= 1 && v <= TOTAL_FRAMES) {
+            enqueueDecode(`${variant}:${getPhysicalFrameNumber(v)}`);
+          }
         }
-        // Also enqueue stride anchors ahead [t+4, t+8, t+16]
+        for (let step = 1; step <= decodeBack; step++) {
+          const v = centerVirtual - step * dir;
+          if (v >= 1 && v <= TOTAL_FRAMES) {
+            enqueueDecode(`${variant}:${getPhysicalFrameNumber(v)}`);
+          }
+        }
+        // Also enqueue stride anchors ahead [t+4, t+8, t+16] along virtual timeline
         for (const s of [4, 8, 16]) {
-          const anchorP = targetPhysical + s * dir;
-          if (anchorP >= 1 && anchorP <= TOTAL_PHYSICAL_FRAMES) {
-            enqueueDecode(`${variant}:${anchorP}`);
+          const v = centerVirtual + s * dir;
+          if (v >= 1 && v <= TOTAL_FRAMES) {
+            enqueueDecode(`${variant}:${getPhysicalFrameNumber(v)}`);
           }
         }
       } else {
-        // High velocity / fast fling: calculate stride and projected lookahead
+        // High velocity / fast fling: calculate stride and projected lookahead along virtual timeline
         const stride = absVel >= 200 ? 8 : absVel >= 80 ? 4 : 2;
-        const projectedVirtual = Math.min(
-          TOTAL_FRAMES,
-          Math.max(1, Math.round(centerVirtual + velocity * 0.08))
-        );
-        const projectedPhysical = getPhysicalFrameNumber(projectedVirtual);
-        const maxDistAhead = Math.max(isMobile ? 32 : 48, Math.abs(projectedPhysical - targetPhysical) + 16);
+        const maxDistAhead = isMobile ? 32 : 56;
 
         // Reverse safety anchors in case user stops or reverses
         for (const s of [2, 4]) {
-          const revP = targetPhysical - s * dir;
-          if (revP >= 1 && revP <= TOTAL_PHYSICAL_FRAMES) {
-            enqueueDecode(`${variant}:${revP}`);
+          const v = centerVirtual - s * dir;
+          if (v >= 1 && v <= TOTAL_FRAMES) {
+            enqueueDecode(`${variant}:${getPhysicalFrameNumber(v)}`);
           }
         }
 
-        // Stride corridor ahead in direction of travel
+        // Stride corridor ahead in direction of travel along virtual timeline
         for (let step = stride; step <= maxDistAhead; step += stride) {
-          const fwdP = targetPhysical + step * dir;
-          if (fwdP >= 1 && fwdP <= TOTAL_PHYSICAL_FRAMES) {
-            enqueueDecode(`${variant}:${fwdP}`);
+          const v = centerVirtual + step * dir;
+          if (v >= 1 && v <= TOTAL_FRAMES) {
+            enqueueDecode(`${variant}:${getPhysicalFrameNumber(v)}`);
           }
         }
 
-        // Also enqueue immediate adjacent frames [targetPhysical + dir, targetPhysical + 2*dir]
-        for (const off of [1, 2]) {
-          const adjP = targetPhysical + off * dir;
-          if (adjP >= 1 && adjP <= TOTAL_PHYSICAL_FRAMES) {
-            enqueueDecode(`${variant}:${adjP}`);
+        // Also enqueue immediate adjacent frames
+        for (const off of [1, 2, 3]) {
+          const v = centerVirtual + off * dir;
+          if (v >= 1 && v <= TOTAL_FRAMES) {
+            enqueueDecode(`${variant}:${getPhysicalFrameNumber(v)}`);
           }
         }
       }
@@ -1043,6 +1087,12 @@ function ScrollytellingEngine({
       // Pre-warm the single team pack well before reaching the team wall (frame 840)
       if (centerVirtual > 500) {
         loadTeamPack().catch(() => {});
+      }
+      // Pre-warm the wall sequence video packs (Packs 39 to 52) when user explores About/Door
+      if (centerVirtual > 360) {
+        for (let p = WALL_PACK_START; p <= WALL_PACK_END; p++) {
+          dispatchPackFetch(p, "idle");
+        }
       }
     },
     [dispatchFetch, dispatchPackFetch, enqueueDecode, pruneBitmapCache, pruneBlobCache]
@@ -1103,6 +1153,15 @@ function ScrollytellingEngine({
           return false;
         };
 
+        // Proactively warm wall loop packs when in or approaching the wall sequence
+        if (curPhys >= 360) {
+          for (let p = WALL_PACK_START; p <= WALL_PACK_END && dispatched < MAX_IDLE_PACK_CONCURRENT; p++) {
+            if (isPackNeeded(p)) {
+              if (dispatchPackFetch(p, "idle")) dispatched++;
+            }
+          }
+        }
+
         for (let p = curPack; p <= warmHi && dispatched < MAX_IDLE_PACK_CONCURRENT; p++) {
           if (isPackNeeded(p)) {
             if (dispatchPackFetch(p, "idle")) dispatched++;
@@ -1134,16 +1193,12 @@ function ScrollytellingEngine({
       if (!canvas) return;
 
       const clamped = Math.min(TOTAL_FRAMES, Math.max(1, frameFloat));
-      let targetInt = Math.floor(clamped);
+      let targetInt = Math.round(clamped);
 
-      // Deliberate blit throttle during flings (Track A1):
-      // When |velocity| > 400 frames/s, draw every 4th integer frame;
-      // When |velocity| > 120 frames/s, draw every 2nd integer frame.
-      // Landing matters; full rate resumes the instant velocity drops.
+      // Only throttle blits on extreme runaway flings (> 550 frames/s) to relieve GPU;
+      // Normal/brisk trackpad scrolling retains 100% 60fps/120fps 1:1 frame pacing.
       const absVel = Math.abs(scrollVelocityRef.current);
-      if (absVel > 400) {
-        targetInt = Math.max(1, targetInt - (targetInt % 4));
-      } else if (absVel > 120) {
+      if (absVel > 550) {
         targetInt = Math.max(1, targetInt - (targetInt % 2));
       }
 

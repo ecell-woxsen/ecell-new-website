@@ -33,10 +33,11 @@ export default function ContactWallSection({
 
   return (
     <div
-      className="relative shrink-0 flex flex-col justify-center w-[85vw] max-w-[1200px] select-none will-change-transform transition-all duration-300 ease-out py-6"
+      className="relative shrink-0 flex flex-col justify-center w-[85vw] max-w-[1200px] select-none transition-opacity duration-300 ease-out py-6"
       style={{
         opacity: sectionOpacity,
         transform: `translate3d(0, ${revealY}px, 0)`,
+        contain: "layout style",
       }}
     >
       {/* ========================================================================= */}

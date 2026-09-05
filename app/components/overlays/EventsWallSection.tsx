@@ -69,14 +69,14 @@ export default function EventsWallSection({}: EventsWallSectionProps) {
           <div
             key={event.number}
             data-active={index === 0 ? "true" : "false"}
-            className="gallery-event-card relative shrink-0 flex flex-col items-start justify-center w-[85vw] sm:w-[500px] md:w-[560px] lg:w-[620px] select-none will-change-transform"
+            className="gallery-event-card relative shrink-0 flex flex-col items-start justify-center w-[85vw] sm:w-[500px] md:w-[560px] lg:w-[620px] select-none"
+            style={{ contain: "layout style" }}
           >
-            {/* INVISIBLE CINEMATIC AMBIENT ILLUMINATION */}
+            {/* CINEMATIC AMBIENT ILLUMINATION (GPU-performant softbox gradient without 900px blur kernel) */}
             <div
-              className="absolute -top-28 -left-28 w-[900px] h-[750px] pointer-events-none blur-3xl rounded-full transition-opacity duration-500"
+              className="absolute -top-28 -left-28 w-[720px] h-[600px] pointer-events-none rounded-full"
               style={{
-                opacity: 0.25,
-                background: `radial-gradient(ellipse at 40% 35%, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 40%, transparent 75%)`,
+                background: `radial-gradient(ellipse at 40% 35%, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.015) 45%, transparent 70%)`,
               }}
               aria-hidden="true"
             />
@@ -110,7 +110,7 @@ export default function EventsWallSection({}: EventsWallSectionProps) {
                 alt={event.alt}
                 fill
                 unoptimized={Boolean(packUrls[event.image])}
-                className="event-card-img object-cover transition-all duration-700 ease-out group-hover:scale-[1.02] grayscale-[15%]"
+                className="event-card-img object-cover transition-transform duration-700 ease-out group-hover:scale-[1.02]"
                 sizes="(max-width: 768px) 85vw, 620px"
               />
               {/* Atmospheric lighting gradient */}

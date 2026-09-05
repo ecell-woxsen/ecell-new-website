@@ -169,17 +169,16 @@ h1, h2, h3, h4, h5, h6, .font-heading {
 /* ========================================================================= */
 /* WALL GALLERY: DYNAMIC CENTER-CARD ACTIVE STATES                           */
 /* Center card is 100% fully opaque (opacity: 1), non-center cards are translucent */
+/* GPU-optimized: purely opacity & color transitions (zero subpixel scale churn)   */
 /* ========================================================================= */
 
 .gallery-event-card {
   opacity: 0.35;
-  transform: scale(0.97);
-  transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1), transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .gallery-event-card[data-active="true"] {
   opacity: 1 !important;
-  transform: scale(1) !important;
 }
 
 .gallery-event-card[data-active="true"] .event-card-image {
@@ -201,20 +200,14 @@ h1, h2, h3, h4, h5, h6, .font-heading {
   color: #ffffff !important;
 }
 
-.gallery-event-card[data-active="true"] .event-card-img {
-  filter: grayscale(0%) !important;
-}
-
 /* Team Section Dynamic Items */
 .gallery-team-hero {
   opacity: 0.42;
-  transform: scale(0.97);
-  transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1), transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .gallery-team-hero[data-active="true"] {
   opacity: 1 !important;
-  transform: scale(1) !important;
 }
 
 .gallery-team-hero[data-active="true"] .team-hero-dot {
@@ -242,18 +235,15 @@ h1, h2, h3, h4, h5, h6, .font-heading {
 .gallery-team-hero[data-active="true"] .team-monogram {
   color: rgba(110, 231, 183, 0.9) !important;
   opacity: 0.98 !important;
-  transform: scale(1.05) !important;
 }
 
 .gallery-team-col {
   opacity: 0.38;
-  transform: scale(0.97);
-  transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1), transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .gallery-team-col[data-active="true"] {
   opacity: 1 !important;
-  transform: scale(1) !important;
 }
 
 .gallery-team-col[data-active="true"] .team-col-dot {
@@ -281,6 +271,6 @@ h1, h2, h3, h4, h5, h6, .font-heading {
 .gallery-team-col[data-active="true"] .team-monogram {
   color: rgba(110, 231, 183, 0.9) !important;
   opacity: 0.98 !important;
-  transform: scale(1.05) !important;
 }
+
 
