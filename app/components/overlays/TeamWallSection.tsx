@@ -29,12 +29,6 @@ const MENTORS_DATA: MentorMember[] = [
     isChief: true,
   },
   {
-    name: "Dr. Lakshmi Prasanna",
-    role: "Mentor",
-    badge: "MENTOR",
-    image: "/team/lakshmi.webp",
-  },
-  {
     name: "Sambit Patra",
     role: "Mentor",
     badge: "MENTOR",
@@ -362,7 +356,7 @@ export default function TeamWallSection({
         </div>
       </div>
 
-      {/* MENTORS EXHIBITION: UNIFORM TRIO (CHIEF MENTOR & MENTORS) */}
+      {/* MENTORS EXHIBITION: CHIEF MENTOR & MENTOR */}
       <div
         className="gallery-team-item gallery-team-hero relative shrink-0 flex items-end gap-8 sm:gap-10 lg:gap-12"
         style={{

@@ -32,7 +32,6 @@ const IMAGE_EXTS = [".webp", ".png", ".jpg", ".jpeg"];
 const CUSTOM_IMAGE_DIMS: Record<string, number> = {
   bernard: 600,
   sambit: 600,
-  lakshmi: 500,
 };
 
 const fmtKB = (bytes: number) => `${Math.round(bytes / 1024)}KB`;
