@@ -21,8 +21,8 @@ function Header({
   const navItems = [
     { label: "ABOUT", frame: 378, active: currentFrame >= 365 && currentFrame < 450 },
     { label: "EVENTS", frame: 630, active: currentFrame >= 598 && currentFrame < 840 },
-    { label: "TEAM", frame: 865, active: currentFrame >= 840 && currentFrame < 1140 },
-    { label: "COMMUNITY", frame: 1260, active: currentFrame >= 1140 },
+    { label: "TEAM", frame: 865, active: currentFrame >= 840 && currentFrame < 1220 },
+    { label: "COMMUNITY", frame: 1260, active: currentFrame >= 1220 },
   ];
 
   return (

@@ -1954,21 +1954,19 @@ function ScrollytellingEngine({
         (lastReportedFrameRef.current >= 598 && roundedFrame < 598) ||
         (lastReportedFrameRef.current < 840 && roundedFrame >= 840) ||
         (lastReportedFrameRef.current >= 840 && roundedFrame < 840) ||
-        (lastReportedFrameRef.current < 1140 && roundedFrame >= 1140) ||
-        (lastReportedFrameRef.current >= 1140 && roundedFrame < 1140) ||
-        (lastReportedFrameRef.current < 1200 && roundedFrame >= 1200) ||
-        (lastReportedFrameRef.current >= 1200 && roundedFrame < 1200) ||
+        (lastReportedFrameRef.current < 1220 && roundedFrame >= 1220) ||
+        (lastReportedFrameRef.current >= 1220 && roundedFrame < 1220) ||
         (lastReportedFrameRef.current < 1260 && roundedFrame >= 1260) ||
         (lastReportedFrameRef.current >= 1260 && roundedFrame < 1260);
 
       // Section tracking for Header navigation highlights
       const prevSection =
-        lastReportedFrameRef.current >= 1140 ? 4 :
+        lastReportedFrameRef.current >= 1220 ? 4 :
         lastReportedFrameRef.current >= 840 ? 3 :
         lastReportedFrameRef.current >= 598 ? 2 :
         lastReportedFrameRef.current >= 365 && lastReportedFrameRef.current < 450 ? 1 : 0;
       const nextSection =
-        roundedFrame >= 1140 ? 4 :
+        roundedFrame >= 1220 ? 4 :
         roundedFrame >= 840 ? 3 :
         roundedFrame >= 598 ? 2 :
         roundedFrame >= 365 && roundedFrame < 450 ? 1 : 0;

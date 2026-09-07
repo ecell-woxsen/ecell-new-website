@@ -12,6 +12,36 @@ interface TeamMember {
   image: string;
 }
 
+interface MentorMember {
+  name: string;
+  role: string;
+  badge: string;
+  image: string;
+  isChief?: boolean;
+}
+
+const MENTORS_DATA: MentorMember[] = [
+  {
+    name: "Bernard Bhutia",
+    role: "Chief Mentor",
+    badge: "CHIEF MENTOR",
+    image: "/team/bernard.webp",
+    isChief: true,
+  },
+  {
+    name: "Dr. Lakshmi Prasanna",
+    role: "Mentor",
+    badge: "MENTOR",
+    image: "/team/lakshmi.webp",
+  },
+  {
+    name: "Sambit Patra",
+    role: "Mentor",
+    badge: "MENTOR",
+    image: "/team/sambit.webp",
+  },
+];
+
 interface TeamGroup {
   id: string;
   label: string;
@@ -25,7 +55,7 @@ const TEAM_DATA: TeamGroup[] = [
     id: "leadership",
     label: "EXECUTIVE LEADERSHIP",
     category: "hero",
-    targetFrame: 880,
+    targetFrame: 910,
     members: [
       {
         name: "Mohnish Singh Patwal",
@@ -45,7 +75,7 @@ const TEAM_DATA: TeamGroup[] = [
     id: "advisors",
     label: "ADVISORS",
     category: "contact-sheet",
-    targetFrame: 940,
+    targetFrame: 960,
     members: [
       {
         name: "HC",
@@ -65,7 +95,7 @@ const TEAM_DATA: TeamGroup[] = [
     id: "secretaries",
     label: "SECRETARIES",
     category: "contact-sheet",
-    targetFrame: 980,
+    targetFrame: 1000,
     members: [
       {
         name: "Shrinidhi",
@@ -85,7 +115,7 @@ const TEAM_DATA: TeamGroup[] = [
     id: "technology",
     label: "TECHNOLOGY",
     category: "contact-sheet",
-    targetFrame: 1020,
+    targetFrame: 1040,
     members: [
       {
         name: "Imad",
@@ -105,7 +135,7 @@ const TEAM_DATA: TeamGroup[] = [
     id: "marketing",
     label: "MARKETING & CREATIVES",
     category: "contact-sheet",
-    targetFrame: 1060,
+    targetFrame: 1080,
     members: [
       {
         name: "Mahek Malpani",
@@ -125,7 +155,7 @@ const TEAM_DATA: TeamGroup[] = [
     id: "events",
     label: "EVENTS & OPERATIONS",
     category: "contact-sheet",
-    targetFrame: 1100,
+    targetFrame: 1120,
     members: [
       {
         name: "Mihir Kalway",
@@ -145,7 +175,7 @@ const TEAM_DATA: TeamGroup[] = [
     id: "finance",
     label: "FINANCE & SPONSORSHIP",
     category: "contact-sheet",
-    targetFrame: 1140,
+    targetFrame: 1160,
     members: [
       {
         name: "Pranav",
@@ -165,7 +195,7 @@ const TEAM_DATA: TeamGroup[] = [
     id: "outreach",
     label: "OUTREACH & PARTNERSHIPS",
     category: "contact-sheet",
-    targetFrame: 1180,
+    targetFrame: 1200,
     members: [
       {
         name: "Reetika",
@@ -243,6 +273,12 @@ export default function TeamWallSection({
 }) {
   const [packUrls, setPackUrls] = useState<Record<string, string>>(() => {
     const initial: Record<string, string> = {};
+    for (const mentor of MENTORS_DATA) {
+      if (mentor.image) {
+        const cached = getCachedTeamUrl(mentor.image);
+        if (cached) initial[mentor.image] = cached;
+      }
+    }
     for (const group of TEAM_DATA) {
       for (const member of group.members) {
         if (member.image) {
@@ -297,7 +333,7 @@ export default function TeamWallSection({
           <div className="flex items-center gap-3 h-6 mb-5">
             <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.7)]" />
             <span className="font-mono text-[11px] sm:text-xs font-semibold tracking-[0.25em] uppercase text-emerald-400 drop-shadow-[0_2px_6px_rgba(0,0,0,0.95)]">
-              02 — LEADERSHIP
+              02 — LEADERSHIP & MENTORSHIP
             </span>
             <span className="h-px w-10 bg-white/20" />
           </div>
@@ -311,7 +347,7 @@ export default function TeamWallSection({
 
           {/* Level 3: Exhibition Subtitle Narrative */}
           <p className="text-[15px] sm:text-[16px] text-slate-200/90 font-normal leading-[1.7] max-w-[340px] drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)]">
-            The strategists, operators, and creators steering the venture ecosystem at Woxsen University.
+            The mentors, strategists, operators, and creators steering the venture ecosystem at Woxsen University.
           </p>
         </div>
 
@@ -324,6 +360,64 @@ export default function TeamWallSection({
             WOXSEN E-CELL
           </span>
         </div>
+      </div>
+
+      {/* MENTORS EXHIBITION: UNIFORM TRIO (CHIEF MENTOR & MENTORS) */}
+      <div
+        className="gallery-team-item gallery-team-hero relative shrink-0 flex items-end gap-8 sm:gap-10 lg:gap-12"
+        style={{ contain: "layout style" }}
+        data-active="false"
+      >
+        {MENTORS_DATA.map((mentor) => (
+          <div
+            key={mentor.name}
+            className="relative shrink-0 flex flex-col justify-end w-[240px] sm:w-[280px] lg:w-[320px] group"
+          >
+            {/* Index Label */}
+            <div className="flex items-center gap-2 h-5 mb-3">
+              <span
+                className={`team-hero-dot w-1.5 h-1.5 rounded-full ${
+                  mentor.isChief
+                    ? "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]"
+                    : "bg-emerald-400/50"
+                } transition-all duration-300`}
+              />
+              <span
+                className={`team-hero-label font-mono text-[10px] sm:text-[11px] font-semibold tracking-[0.2em] uppercase ${
+                  mentor.isChief
+                    ? "text-emerald-400 font-bold tracking-[0.22em]"
+                    : "text-emerald-400/70"
+                } transition-colors duration-300`}
+              >
+                {mentor.badge}
+              </span>
+              {mentor.isChief && (
+                <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold tracking-wider uppercase bg-emerald-400/15 text-emerald-300 border border-emerald-400/30">
+                  LEAD
+                </span>
+              )}
+            </div>
+
+            {/* Uniform Editorial Portrait Surface */}
+            <EditorialPortraitSurface
+              name={mentor.name}
+              imageSrc={resolveImage(mentor.image)}
+              className={`w-full h-[370px] sm:h-[420px] lg:h-[470px] ${
+                mentor.isChief ? "ring-1 ring-emerald-400/30 group-hover:ring-emerald-400/60" : ""
+              }`}
+            />
+
+            {/* Editorial Caption */}
+            <div className="mt-4 text-left">
+              <h3 className="team-hero-name font-display text-xl sm:text-2xl lg:text-[26px] uppercase tracking-tight leading-tight text-slate-300/80 group-hover:text-emerald-300 transition-colors drop-shadow-[0_3px_12px_rgba(0,0,0,0.98)] truncate">
+                {mentor.name}
+              </h3>
+              <p className="team-hero-role font-mono text-[13px] sm:text-[14px] lg:text-[15px] font-normal tracking-wide mt-1.5 text-slate-400 drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)] transition-colors">
+                {mentor.role}
+              </p>
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* HERO DUO: PRESIDENT & VICE PRESIDENT */}
