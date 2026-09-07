@@ -23,8 +23,8 @@ function WallGalleryOverlay({
   const eventCentersRef = useRef<number[]>([]);
   const teamCentersRef = useRef<number[]>([]);
   const contactCenterRef = useRef<number>(0);
-  const activeEventIdxRef = useRef<number>(0);
-  const activeTeamIdxRef = useRef<number>(0);
+  const activeEventIdxRef = useRef<number>(-1);
+  const activeTeamIdxRef = useRef<number>(-1);
   const isContactActiveRef = useRef<boolean>(false);
 
   useEffect(() => {

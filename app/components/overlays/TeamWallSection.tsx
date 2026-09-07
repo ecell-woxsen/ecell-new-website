@@ -366,7 +366,7 @@ export default function TeamWallSection({
       <div
         className="gallery-team-item gallery-team-hero relative shrink-0 flex items-end gap-8 sm:gap-10 lg:gap-12"
         style={{ contain: "layout style" }}
-        data-active="false"
+        data-active="true"
       >
         {MENTORS_DATA.map((mentor) => (
           <div
@@ -424,7 +424,7 @@ export default function TeamWallSection({
       <div
         className="gallery-team-item gallery-team-hero relative shrink-0 flex items-end gap-10 sm:gap-14 lg:gap-18"
         style={{ contain: "layout style" }}
-        data-active="true"
+        data-active="false"
       >
         {/* President: Dominant Hero Portrait */}
         <div className="relative shrink-0 flex flex-col justify-end w-[280px] sm:w-[340px] lg:w-[400px] group">

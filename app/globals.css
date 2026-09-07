@@ -237,6 +237,32 @@ h1, h2, h3, h4, h5, h6, .font-heading {
   opacity: 0.98 !important;
 }
 
+.gallery-team-hero:hover {
+  opacity: 1 !important;
+}
+
+.gallery-team-hero .group:hover .team-hero-dot {
+  background-color: rgb(52, 211, 153) !important;
+  box-shadow: 0 0 10px rgba(52, 211, 153, 0.9) !important;
+}
+
+.gallery-team-hero .group:hover .team-hero-label {
+  color: rgb(52, 211, 153) !important;
+}
+
+.gallery-team-hero .group:hover .team-hero-name {
+  color: #f8fafc !important;
+}
+
+.gallery-team-hero .group:hover .team-hero-role {
+  color: rgb(52, 211, 153) !important;
+}
+
+.gallery-team-hero .group:hover .team-portrait-surface {
+  border-color: rgba(52, 211, 153, 0.45) !important;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.92), 0 0 28px rgba(52, 211, 153, 0.16) !important;
+}
+
 .gallery-team-col {
   opacity: 0.38;
   transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1);
