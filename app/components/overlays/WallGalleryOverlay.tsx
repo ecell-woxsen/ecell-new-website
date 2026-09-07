@@ -215,7 +215,7 @@ function WallGalleryOverlay({
       {/* Physically Wall-Anchored Gallery Track */}
       <div
         ref={trackRef}
-        className="flex items-center gap-16 sm:gap-24 md:gap-36 lg:gap-44 pl-10 sm:pl-20 md:pl-32 pr-32 py-12 will-change-transform"
+        className="flex items-center gap-16 sm:gap-24 md:gap-36 lg:gap-44 pl-10 sm:pl-20 md:pl-32 pr-32 py-4 sm:py-6 lg:py-8 will-change-transform"
         style={{
           transform: "translate3d(var(--gallery-tx, 0px), 0, 0)",
           pointerEvents: "var(--gallery-pe, none)" as React.CSSProperties["pointerEvents"],

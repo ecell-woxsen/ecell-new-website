@@ -367,8 +367,6 @@ export default function TeamWallSection({
         className="gallery-team-item gallery-team-hero relative shrink-0 flex items-end gap-8 sm:gap-10 lg:gap-12"
         style={{
           contain: "layout style",
-          contentVisibility: "auto",
-          containIntrinsicSize: "1056px 620px",
         }}
         data-active="true"
       >
@@ -429,8 +427,6 @@ export default function TeamWallSection({
         className="gallery-team-item gallery-team-hero relative shrink-0 flex items-end gap-10 sm:gap-14 lg:gap-18"
         style={{
           contain: "layout style",
-          contentVisibility: "auto",
-          containIntrinsicSize: "832px 680px",
         }}
         data-active="false"
       >
@@ -491,38 +487,36 @@ export default function TeamWallSection({
           <div
             key={grp.id}
             data-active="false"
-            className="gallery-team-item gallery-team-col relative shrink-0 flex flex-col justify-end w-[185px] sm:w-[215px] lg:w-[245px] h-[520px] sm:h-[580px] lg:h-[620px]"
+            className="gallery-team-item gallery-team-col relative shrink-0 flex flex-col justify-start w-[185px] sm:w-[215px] lg:w-[245px]"
             style={{
               contain: "layout style",
-              contentVisibility: "auto",
-              containIntrinsicSize: "245px 620px",
             }}
           >
             {/* Department Index Header */}
-            <div className="flex items-center gap-2 h-5 mb-3">
+            <div className="flex items-center gap-2 h-5 mb-2.5 sm:mb-3 shrink-0">
               <span className="team-col-dot w-1.5 h-1.5 rounded-full bg-emerald-400/50 transition-all duration-300" />
-              <span className="team-col-label font-mono text-[10.5px] sm:text-[11.5px] font-semibold tracking-[0.2em] uppercase text-emerald-400/60 transition-colors duration-300 truncate">
+              <span className="team-col-label font-mono text-[10px] sm:text-[11px] font-semibold tracking-[0.2em] uppercase text-emerald-400/60 transition-colors duration-300 truncate">
                 {grp.label}
               </span>
             </div>
 
             {/* Stacked 1x1 Contact Sheet Prints */}
-            <div className="flex flex-col justify-between h-[460px] sm:h-[510px] lg:h-[550px]">
+            <div className="flex flex-col gap-3 sm:gap-3.5 shrink-0">
               {grp.members.map((member) => (
-                <div key={member.name} className="group text-left flex flex-col justify-between">
+                <div key={member.name} className="group text-left flex flex-col shrink-0">
                   {/* Square Exhibition Print */}
                   <EditorialPortraitSurface
                     name={member.name}
                     imageSrc={resolveImage(member.image)}
-                    className="w-full aspect-square"
+                    className="w-full h-[185px] sm:h-[215px] lg:h-[245px] aspect-square"
                   />
 
                   {/* Museum Caption */}
-                  <div className="mt-2.5">
-                    <h4 className="team-col-name font-display text-[17px] sm:text-[18px] lg:text-[20px] uppercase tracking-tight leading-snug text-slate-300/80 group-hover:text-emerald-300 transition-colors drop-shadow-[0_2px_8px_rgba(0,0,0,0.98)] truncate">
+                  <div className="mt-2 shrink-0">
+                    <h4 className="team-col-name font-display text-[16px] sm:text-[18px] lg:text-[19px] uppercase tracking-tight leading-snug text-slate-300/80 group-hover:text-emerald-300 transition-colors drop-shadow-[0_2px_8px_rgba(0,0,0,0.98)] truncate">
                       {member.name}
                     </h4>
-                    <p className="team-col-role font-mono text-[11px] sm:text-[12px] lg:text-[13px] tracking-tight mt-0.5 text-slate-400 drop-shadow-[0_2px_6px_rgba(0,0,0,0.95)] truncate transition-colors">
+                    <p className="team-col-role font-mono text-[10.5px] sm:text-[11.5px] lg:text-[12px] tracking-tight mt-0.5 text-slate-400 drop-shadow-[0_2px_6px_rgba(0,0,0,0.95)] truncate transition-colors">
                       {member.role}
                     </p>
                   </div>

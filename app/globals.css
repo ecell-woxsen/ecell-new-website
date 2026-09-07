@@ -299,6 +299,42 @@ h1, h2, h3, h4, h5, h6, .font-heading {
   opacity: 0.98 !important;
 }
 
+.gallery-team-col:hover {
+  opacity: 1 !important;
+}
+
+.gallery-team-col .group:hover .team-col-dot {
+  background-color: rgb(52, 211, 153) !important;
+  box-shadow: 0 0 10px rgba(52, 211, 153, 0.9) !important;
+}
+
+.gallery-team-col .group:hover .team-col-label {
+  color: rgb(52, 211, 153) !important;
+}
+
+.gallery-team-col .group:hover .team-col-name {
+  color: #f8fafc !important;
+}
+
+.gallery-team-col .group:hover .team-col-role {
+  color: rgb(52, 211, 153) !important;
+}
+
+.gallery-team-col .group:hover .team-portrait-surface {
+  border-color: rgba(52, 211, 153, 0.45) !important;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.92), 0 0 28px rgba(52, 211, 153, 0.16) !important;
+}
+
+/* Fallback only for small laptop viewports under 740px */
+@media (max-height: 740px) {
+  .gallery-team-hero .team-portrait-surface {
+    max-height: 42vh !important;
+  }
+  .gallery-team-col .team-portrait-surface {
+    max-height: 22vh !important;
+  }
+}
+
 /* Contact Section Dynamic Active States */
 .gallery-contact-section {
   opacity: 0.45;

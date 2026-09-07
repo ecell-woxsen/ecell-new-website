@@ -72,10 +72,6 @@ export default function EventsWallSection({}: EventsWallSectionProps) {
             className="gallery-event-card relative shrink-0 flex flex-col items-start justify-center w-[85vw] sm:w-[500px] md:w-[560px] lg:w-[620px] select-none"
             style={{
               contain: "layout style",
-              // RAM: skip decode/paint of off-viewport track items (fixed
-              // widths make the intrinsic placeholder deterministic)
-              contentVisibility: "auto",
-              containIntrinsicSize: "620px 720px",
             }}
           >
             {/* CINEMATIC AMBIENT ILLUMINATION (GPU-performant softbox gradient without 900px blur kernel) */}
@@ -110,7 +106,7 @@ export default function EventsWallSection({}: EventsWallSectionProps) {
             </div>
 
             {/* LEVEL 4: MOUNTED EDITORIAL EXHIBITION PHOTOGRAPH */}
-            <div className="event-card-image relative z-10 w-full max-w-[540px] lg:max-w-[620px] aspect-[16/9.5] rounded-xl sm:rounded-2xl overflow-hidden border border-white/15 bg-[#0a0f16] shadow-[0_20px_45px_rgba(0,0,0,0.85)] group transition-all duration-500">
+            <div className="event-card-image relative z-10 w-full max-w-[540px] lg:max-w-[620px] h-[260px] sm:h-[300px] md:h-[335px] lg:h-[370px] aspect-[16/9.5] rounded-xl sm:rounded-2xl overflow-hidden border border-white/15 bg-[#0a0f16] shadow-[0_20px_45px_rgba(0,0,0,0.85)] group transition-all duration-500">
               <Image
                 src={packUrls[event.image] || getAssetUrl(event.image)}
                 alt={event.alt}
