@@ -70,7 +70,13 @@ export default function EventsWallSection({}: EventsWallSectionProps) {
             key={event.number}
             data-active={index === 0 ? "true" : "false"}
             className="gallery-event-card relative shrink-0 flex flex-col items-start justify-center w-[85vw] sm:w-[500px] md:w-[560px] lg:w-[620px] select-none"
-            style={{ contain: "layout style" }}
+            style={{
+              contain: "layout style",
+              // RAM: skip decode/paint of off-viewport track items (fixed
+              // widths make the intrinsic placeholder deterministic)
+              contentVisibility: "auto",
+              containIntrinsicSize: "620px 720px",
+            }}
           >
             {/* CINEMATIC AMBIENT ILLUMINATION (GPU-performant softbox gradient without 900px blur kernel) */}
             <div

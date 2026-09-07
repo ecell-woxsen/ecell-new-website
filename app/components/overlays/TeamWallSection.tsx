@@ -365,7 +365,11 @@ export default function TeamWallSection({
       {/* MENTORS EXHIBITION: UNIFORM TRIO (CHIEF MENTOR & MENTORS) */}
       <div
         className="gallery-team-item gallery-team-hero relative shrink-0 flex items-end gap-8 sm:gap-10 lg:gap-12"
-        style={{ contain: "layout style" }}
+        style={{
+          contain: "layout style",
+          contentVisibility: "auto",
+          containIntrinsicSize: "1056px 620px",
+        }}
         data-active="true"
       >
         {MENTORS_DATA.map((mentor) => (
@@ -423,7 +427,11 @@ export default function TeamWallSection({
       {/* HERO DUO: PRESIDENT & VICE PRESIDENT */}
       <div
         className="gallery-team-item gallery-team-hero relative shrink-0 flex items-end gap-10 sm:gap-14 lg:gap-18"
-        style={{ contain: "layout style" }}
+        style={{
+          contain: "layout style",
+          contentVisibility: "auto",
+          containIntrinsicSize: "832px 680px",
+        }}
         data-active="false"
       >
         {/* President: Dominant Hero Portrait */}
@@ -484,7 +492,11 @@ export default function TeamWallSection({
             key={grp.id}
             data-active="false"
             className="gallery-team-item gallery-team-col relative shrink-0 flex flex-col justify-end w-[185px] sm:w-[215px] lg:w-[245px] h-[520px] sm:h-[580px] lg:h-[620px]"
-            style={{ contain: "layout style" }}
+            style={{
+              contain: "layout style",
+              contentVisibility: "auto",
+              containIntrinsicSize: "245px 620px",
+            }}
           >
             {/* Department Index Header */}
             <div className="flex items-center gap-2 h-5 mb-3">

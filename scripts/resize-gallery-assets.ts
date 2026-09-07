@@ -28,6 +28,13 @@ const LOGO_MAX_DIM = 256;
 const LOGO_QUALITY = 85;
 const IMAGE_EXTS = [".webp", ".png", ".jpg", ".jpeg"];
 
+// Display-bounded limits for mentors (displayed at <=320 CSS px; 600px gives 2x Retina clarity with ~44% RAM savings)
+const CUSTOM_IMAGE_DIMS: Record<string, number> = {
+  bernard: 600,
+  sambit: 600,
+  lakshmi: 500,
+};
+
 const fmtKB = (bytes: number) => `${Math.round(bytes / 1024)}KB`;
 
 async function resizeDir(srcDir: string, outDir: string, maxDim: number, quality: number): Promise<void> {
@@ -45,15 +52,23 @@ async function resizeDir(srcDir: string, outDir: string, maxDim: number, quality
     const ext = path.extname(entry.name).toLowerCase();
     if (!IMAGE_EXTS.includes(ext)) continue;
 
+    const baseName = path.basename(entry.name, ext);
+    const targetDim = CUSTOM_IMAGE_DIMS[baseName.toLowerCase()] ?? maxDim;
+
     const srcPath = path.join(srcDir, entry.name);
-    const outName = `${path.basename(entry.name, ext)}.webp`;
+    const outName = `${baseName}.webp`;
     const outPath = path.join(outDir, outName);
 
     const before = fs.statSync(srcPath).size;
     const info = await sharp(srcPath)
-      .resize({ width: maxDim, height: maxDim, fit: "inside", withoutEnlargement: true })
-      .webp({ quality })
+      .resize({ width: targetDim, height: targetDim, fit: "inside", withoutEnlargement: true })
+      .webp({ quality, smartSubsample: true })
       .toFile(outPath);
+
+    // Keep public/team synchronized with public/team_v2 so direct requests and R2 uploads match
+    if (path.resolve(outPath) !== path.resolve(srcPath) && ext === ".webp") {
+      fs.copyFileSync(outPath, srcPath);
+    }
 
     srcBytes += before;
     outBytes += info.size;

@@ -65,12 +65,12 @@ const LOOKAHEAD_FORWARD = 32;
 const LOOKAHEAD_BACKWARD = 12;
 const PREFETCH_ABORT_DISTANCE = 40; // abort in-flight requests this far from the playhead
 
-// Decode pipeline: expanded decode-ahead window ensures continuous 60fps/120fps
-// without playhead starvation or repetitive decode/evict churn.
+// Decode pipeline: decode-ahead is sized to stay INSIDE the bitmap cache cap
+// so the queue never churns evict/re-decode cycles at 60fps/120fps.
 const DECODE_BACK = 6;
-const DECODE_FORWARD_DESKTOP = 28; // t-6..t+28 = 35-frame headroom ahead
-const DECODE_FORWARD_TABLET = 18;
-const DECODE_FORWARD_MOBILE = 14;
+const DECODE_FORWARD_DESKTOP = 20; // t-6..t+20 = 27 frames ≤ 26-28 cap
+const DECODE_FORWARD_TABLET = 14;   // t-6..t+14 = 20 frames ≤ 20 tablet cap
+const DECODE_FORWARD_MOBILE = 10;   // t-6..t+10 = 16 frames ≤ 16 mobile cap
 const MAX_CONCURRENT_DECODES = 8;
 
 const getDecodeForward = (variant: AssetVariant): number =>
@@ -80,13 +80,32 @@ const getDecodeForward = (variant: AssetVariant): number =>
     ? DECODE_FORWARD_TABLET
     : DECODE_FORWARD_DESKTOP;
 
+// ---------------------------------------------------------------------------
+// RAM GOVERNOR: motion-aware cache capacity
+// ---------------------------------------------------------------------------
+// While the user is reading (|velocity| ≤ MOTION_VELOCITY_THRESHOLD for
+// IDLE_TRIM_DELAY_MS) the bitmap cache collapses to a small ring around the
+// playhead; any motion refills to full capacity through the regular
+// decode-ahead scheduler. This turns the dominant RAM tier from "always at
+// cap" into "at cap only while actively moving" — idle sessions sit at a
+// fraction of the peak budget.
+const IDLE_TRIM_DELAY_MS = 3000;
+const IDLE_TRIM_CAP_DESKTOP = 12;
+const IDLE_TRIM_CAP_TABLET = 10;
+const IDLE_TRIM_CAP_MOBILE = 8;
+// Below this velocity the playhead is considered "still" (EMA decays to 0
+// within a frame of stopping; nav deceleration keeps velocity above this
+// until arrival, so the trim never fires mid-approach).
+const MOTION_VELOCITY_THRESHOLD = 0.5;
+
 // Bounded bitmap cache capacities (calibrated for high-framerate fluidity).
-// Desktop (1080p): 38 bitmaps * 8.29MB ≈ 315MB peak RAM
-// Tablet (720p):   26 bitmaps * 3.68MB ≈ 95MB peak RAM
-// Mobile (720p):   22 bitmaps * 1.16MB ≈ 25MB peak RAM
-const MAX_BITMAP_CACHE_SIZE_DESKTOP = 38;
-const MAX_BITMAP_CACHE_SIZE_TABLET = 26;
-const MAX_BITMAP_CACHE_SIZE_MOBILE = 22;
+// Frames decode at a viewport-clamped resolution (see getDecodeTarget), so:
+// Desktop (1080p): 26 bitmaps * ≤5.76MB (1600×900) ≈ 150MB peak / 69MB idle
+// Tablet (720p):   20 bitmaps * 3.68MB ≈ 74MB peak RAM
+// Mobile (720p):   16 bitmaps * 1.16MB ≈ 19MB peak RAM
+const MAX_BITMAP_CACHE_SIZE_DESKTOP = 26;
+const MAX_BITMAP_CACHE_SIZE_TABLET = 20;
+const MAX_BITMAP_CACHE_SIZE_MOBILE = 16;
 
 const getDecodeConcurrency = (): number => {
   if (typeof window === "undefined" || typeof navigator === "undefined") return 4;
@@ -161,6 +180,7 @@ const stats = {
   endpointPauses: 0,
   decodes: 0,
   decodeDrops: 0,
+  decodeMs: 0, // EMA of decode latency (ms) — separates decode throughput issues from scheduling issues
   blobEvictions: 0,
 };
 if (typeof window !== "undefined") {
@@ -201,14 +221,13 @@ const decodeViaImageElement = (blob: Blob): Promise<FrameAsset | null> =>
     img.src = objectUrl;
   });
 
+// Native off-thread bitmap decoder (hardware-accelerated, non-blocking)
 const decodeAsset = (blob: Blob): Promise<FrameAsset | null> => {
   if (typeof window !== "undefined" && "createImageBitmap" in window) {
     return createImageBitmap(blob, {
       colorSpaceConversion: "none",
       premultiplyAlpha: "default",
-    }).catch(() =>
-      createImageBitmap(blob).catch(() => decodeViaImageElement(blob))
-    );
+    }).catch(() => decodeViaImageElement(blob));
   }
   return decodeViaImageElement(blob);
 };
@@ -246,6 +265,11 @@ function ScrollytellingEngine({
   const urgentCountRef = useRef(0);
   const idleCountRef = useRef(0);
   const unmountedRef = useRef(false);
+
+  // RAM governor state (motion-aware cache capacity — see constants block)
+  const lastMotionTimeRef = useRef(0);
+  const idleTrimActiveRef = useRef(false);
+  const lastGovernorCheckRef = useRef(0);
 
   // Failure isolation state
   const blockedKeysRef = useRef<Map<string, { until: number; count: number }>>(new Map());
@@ -503,12 +527,20 @@ function ScrollytellingEngine({
   // =========================================================================
   const pruneBitmapCache = useCallback((currentPhysical: number) => {
     const variant = assetVariantRef.current;
-    const maxCapacity =
+    const baseCapacity =
       variant === "mobile_720p"
         ? MAX_BITMAP_CACHE_SIZE_MOBILE
         : variant === "720p"
         ? MAX_BITMAP_CACHE_SIZE_TABLET
         : MAX_BITMAP_CACHE_SIZE_DESKTOP;
+    // RAM governor: while idle, collapse to a small ring around the playhead
+    const idleCap =
+      variant === "mobile_720p"
+        ? IDLE_TRIM_CAP_MOBILE
+        : variant === "720p"
+        ? IDLE_TRIM_CAP_TABLET
+        : IDLE_TRIM_CAP_DESKTOP;
+    const maxCapacity = idleTrimActiveRef.current ? Math.min(baseCapacity, idleCap) : baseCapacity;
 
     // 1. Evict stale variant bitmaps first
     for (const [key, asset] of bitmapCacheRef.current) {
@@ -527,6 +559,9 @@ function ScrollytellingEngine({
     const protectedKeyB = lastDrawnKeyBRef.current;
     const candidates: Array<{ key: string; dist: number }> = [];
     const inWallLoop = currentPhysical >= WALL_LOOP_START && currentPhysical <= WALL_LOOP_END;
+    const vel = scrollVelocityRef.current;
+    const isMoving = Math.abs(vel) > 0.5;
+    const isForward = vel > 0;
 
     for (const key of bitmapCacheRef.current.keys()) {
       if (key === protectedKeyA || key === protectedKeyB) continue;
@@ -536,7 +571,11 @@ function ScrollytellingEngine({
         const loopDist = Math.abs(p - currentPhysical);
         dist = Math.min(loopDist, WALL_LOOP_LENGTH - loopDist);
       }
-      candidates.push({ key, dist });
+      // Directional eviction bias: when moving, evict frames BEHIND the travel direction first
+      // so lookahead frames ahead of the playhead are protected from eviction.
+      const isBehind = isMoving ? (isForward ? p < currentPhysical : p > currentPhysical) : false;
+      const effectiveDist = isBehind ? dist + 100 : dist;
+      candidates.push({ key, dist: effectiveDist });
     }
 
     candidates.sort((a, b) => b.dist - a.dist);
@@ -618,6 +657,12 @@ function ScrollytellingEngine({
 
   const pumpDecodeQueueRef = useRef<() => void>(() => {});
 
+  // Ref bridge so the RAF loop can run the bitmap pruner (governor trim)
+  const pruneBitmapCacheRef = useRef<((physical: number) => void) | null>(null);
+  useEffect(() => {
+    pruneBitmapCacheRef.current = pruneBitmapCache;
+  }, [pruneBitmapCache]);
+
   const pumpDecodeQueue = useCallback(() => {
     const isMobile = assetVariantRef.current === "mobile_720p";
     const maxDecodes = isMobile ? Math.min(4, getDecodeConcurrency()) : getDecodeConcurrency();
@@ -650,7 +695,9 @@ function ScrollytellingEngine({
 
       decodeInflightRef.current.add(key);
       stats.decodes++;
+      const decodeStart = performance.now();
       decodeAsset(blob).then((asset) => {
+        stats.decodeMs = stats.decodeMs * 0.9 + (performance.now() - decodeStart) * 0.1;
         decodeInflightRef.current.delete(key);
         if (asset) {
           if (!unmountedRef.current) {
@@ -946,7 +993,9 @@ function ScrollytellingEngine({
       const isMobile = variant === "mobile_720p";
       const lookaheadForward = isMobile ? 40 : LOOKAHEAD_FORWARD;
 
-      // 1) Prune decoded bitmaps via bounded distance-based capacity
+      // 1) Prune decoded bitmaps via bounded distance-based capacity (the RAM
+      //    governor that flips idleTrimActiveRef lives in the RAF loop so it
+      //    engages during stillness, not only on scroll ticks)
       pruneBitmapCache(targetPhysical);
 
       // 1b) Prune Tier-1 blobs beyond the sliding window (throttled to pack
@@ -1022,17 +1071,19 @@ function ScrollytellingEngine({
           }
         }
 
-        // Stride corridor ahead in direction of travel along virtual timeline
-        for (let step = stride; step <= maxDistAhead; step += stride) {
-          const v = centerVirtual + step * dir;
+        // Immediate adjacent frames FIRST — the FIFO pump serves the queue
+        // head first, so the next visible frames must not queue behind the
+        // sparse stride anchors.
+        for (const off of [1, 2, 3]) {
+          const v = centerVirtual + off * dir;
           if (v >= 1 && v <= TOTAL_FRAMES) {
             enqueueDecode(`${variant}:${getPhysicalFrameNumber(v)}`);
           }
         }
 
-        // Also enqueue immediate adjacent frames
-        for (const off of [1, 2, 3]) {
-          const v = centerVirtual + off * dir;
+        // Stride corridor ahead in direction of travel along virtual timeline
+        for (let step = stride; step <= maxDistAhead; step += stride) {
+          const v = centerVirtual + step * dir;
           if (v >= 1 && v <= TOTAL_FRAMES) {
             enqueueDecode(`${variant}:${getPhysicalFrameNumber(v)}`);
           }
@@ -1237,9 +1288,9 @@ function ScrollytellingEngine({
           drawKeyB = targetKeyB;
           assetB = bitmapCacheRef.current.get(targetKeyB) || null;
         } else {
-          // If blob is available, enqueue decode so it's ready for subsequent subframe ticks
+          // If blob is available, jump the queue so Frame B is ready for subsequent subframe ticks
           if (blobCacheRef.current.has(targetKeyB)) {
-            enqueueDecode(targetKeyB, false);
+            enqueueDecode(targetKeyB, true);
           }
         }
       }
@@ -1263,9 +1314,12 @@ function ScrollytellingEngine({
         return;
       }
 
-      const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
-      const targetWidth = Math.round(width * dpr);
-      const targetHeight = Math.round(height * dpr);
+      let dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+      // Canvas backing store: match device pixels, bounded by max source frame width (1920)
+      // to eliminate wasted GPU buffer allocation and fill-rate cost.
+      const targetWidth = Math.min(1920, Math.round(width * dpr));
+      const targetHeight = Math.round((targetWidth * height) / width);
+      dpr = targetWidth / width;
 
       let ctx = ctxRef.current;
       if (canvas.width !== targetWidth || canvas.height !== targetHeight || !ctx) {
@@ -1604,10 +1658,10 @@ function ScrollytellingEngine({
     const isTouch = typeof window !== "undefined" && ("ontouchstart" in window || navigator.maxTouchPoints > 0);
 
     // Speed Limiter Configuration
-    // Calibrated so scrolling feels responsive, agile, and fluid while preventing runaway flings
-    const maxDeltaPerEvent = isTouch ? 90 : 160;
-    const maxScrollLead = isTouch ? 400 : 650;
-    const maxInputSpeed = isTouch ? 2400 : 3600; // px/sec
+    // Calibrated for buttery-smooth trackpad and mouse wheel feel with natural deceleration
+    const maxDeltaPerEvent = isTouch ? 120 : 220;
+    const maxScrollLead = isTouch ? 600 : 1000;
+    const maxInputSpeed = isTouch ? 3200 : 6000; // px/sec
 
     let lastInputTime = performance.now();
 
@@ -1638,27 +1692,21 @@ function ScrollytellingEngine({
         dy = Math.sign(dy) * Math.max(8, maxDeltaForDt);
       }
 
-      // 3. Scroll lead limiter: prevent queuing up runaway distance ahead of current playhead
+      // 3. Scroll lead limiter: smooth soft-damping when approaching maxScrollLead (never drop events abruptly)
       if (lenisRef.current) {
         const animated = lenisRef.current.animatedScroll;
         const target = lenisRef.current.targetScroll;
         const currentLead = target - animated;
 
-        // If scrolling in same direction as current lead, enforce maximum lead buffer smoothly
+        // If scrolling in same direction as current lead, apply smooth physical resistance
         if (dy > 0 && currentLead >= 0) {
           const headroom = Math.max(0, maxScrollLead - currentLead);
-          dy = Math.min(dy, headroom);
-          if (dy < 0.1) {
-            data.deltaY = 0;
-            return false; // Lead buffer saturated: absorb excess runaway fling
-          }
+          const damping = headroom / maxScrollLead;
+          dy = dy * Math.max(0.15, damping);
         } else if (dy < 0 && currentLead <= 0) {
           const headroom = Math.min(0, -maxScrollLead - currentLead);
-          dy = Math.max(dy, headroom);
-          if (dy > -0.1) {
-            data.deltaY = 0;
-            return false;
-          }
+          const damping = headroom / -maxScrollLead;
+          dy = dy * Math.max(0.15, damping);
         }
         // If scrolling opposite direction (user reversed scroll), allow immediately!
       }
@@ -1668,8 +1716,8 @@ function ScrollytellingEngine({
     };
 
     const lenis = new Lenis({
-      duration: prefersReducedMotion ? 0 : isTouch ? 0.65 : 0.75,
-      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -7 * t)),
+      duration: prefersReducedMotion ? 0 : isTouch ? 0.7 : 0.85,
+      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
       orientation: "vertical",
       gestureOrientation: "vertical",
       smoothWheel: true,
@@ -1730,9 +1778,11 @@ function ScrollytellingEngine({
         let blobBytes = 0;
         for (const b of blobCacheRef.current.values()) blobBytes += b.size;
         let bitmapBytes = 0;
-        for (const key of bitmapCacheRef.current.keys()) {
-          const v = key.slice(0, key.indexOf(":"));
-          bitmapBytes += v === "1080p" ? 1920 * 1080 * 4 : v === "720p" ? 1280 * 720 * 4 : 404 * 720 * 4;
+        for (const asset of bitmapCacheRef.current.values()) {
+          // Exact per-asset footprint (resized ImageBitmaps included)
+          const w = "naturalWidth" in asset && asset.naturalWidth ? asset.naturalWidth : asset.width;
+          const h = "naturalHeight" in asset && asset.naturalHeight ? asset.naturalHeight : asset.height;
+          bitmapBytes += w * h * 4;
         }
         const entry: Record<string, unknown> = {
           ...stats,
@@ -1747,6 +1797,8 @@ function ScrollytellingEngine({
           blocked: blockedKeysRef.current.size,
           blockedPacks: blockedPacksRef.current.size,
           endpointPaused: Date.now() < endpointGuardRef.current.pausedUntil,
+          idleTrim: idleTrimActiveRef.current,
+          decodeTarget: "native",
         };
         if (debugParams.has("mem")) {
           const mem = (performance as Performance & { memory?: { usedJSHeapSize: number } }).memory;
@@ -1823,7 +1875,7 @@ function ScrollytellingEngine({
         renderFloat = targetFloat;
       } else {
         const deltaFloat = targetFloat - prevFloat;
-        const maxFrameSpeed = isTouch ? 160 : 250; // max frames per second
+        const maxFrameSpeed = isTouch ? 180 : 320; // max frames per second
         const maxDeltaFloat = maxFrameSpeed * dt;
         if (Math.abs(deltaFloat) > maxDeltaFloat) {
           renderFloat = prevFloat + Math.sign(deltaFloat) * maxDeltaFloat;
@@ -1840,6 +1892,29 @@ function ScrollytellingEngine({
         ? 0
         : scrollVelocityRef.current * 0.6 + rawVelocity * 0.4;
       scrollVelocityRef.current = velocity;
+
+      // ---- RAM GOVERNOR (RAF-owned so it engages DURING stillness) ----
+      // Motion resets the idle clock; 3s of stillness (with no navigation in
+      // flight) collapses the bitmap cache to the idle ring. Any motion
+      // refills to full capacity via the decode-ahead scheduler.
+      if (Math.abs(velocity) > MOTION_VELOCITY_THRESHOLD) {
+        lastMotionTimeRef.current = Date.now();
+        idleTrimActiveRef.current = false;
+      } else if (
+        !idleTrimActiveRef.current &&
+        now - lastGovernorCheckRef.current >= 500
+      ) {
+        lastGovernorCheckRef.current = now;
+        const navPending =
+          targetNavigationFrameRef.current !== null || navSimulationRef.current.active;
+        if (
+          !navPending &&
+          Date.now() - lastMotionTimeRef.current > IDLE_TRIM_DELAY_MS
+        ) {
+          idleTrimActiveRef.current = true;
+          pruneBitmapCacheRef.current?.(getPhysicalFrameNumber(renderFloat));
+        }
+      }
 
       // Priority scheduler: execute immediately when the integer frame advances at normal speed,
       // but throttle during fast movement/rewinds (every 40ms or 6 frames)
@@ -1877,13 +1952,22 @@ function ScrollytellingEngine({
       }
       const vid = videoRef.current;
       if (vid && !videoPermanentlyStoppedRef.current) {
-        // Fire-and-forget (Track A2): play once at boot → on fade-out pause + reset currentTime to 0 → never resume.
-        // Scrolled-back hero shows the paused first frame (visually same scene as canvas frame 1).
+        // Fire-and-forget (Track A2): play once at boot → on fade-out pause
+        // and release the decoder entirely → never resume. A scrolled-back
+        // hero shows canvas frame 1 underneath — the same scene the video
+        // was mirroring — so the element itself is no longer needed.
         if (vOpacity <= 0.005) {
           videoPermanentlyStoppedRef.current = true;
           vid.pause();
           try {
             vid.currentTime = 0;
+          } catch {}
+          // Releasing src/poster drops the video decoder + buffered frames
+          // (~10-20MB) for the rest of the session.
+          vid.removeAttribute("src");
+          vid.removeAttribute("poster");
+          try {
+            vid.load();
           } catch {}
         }
       }
