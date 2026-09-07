@@ -317,6 +317,7 @@ function ScrollytellingEngine({
   const isProgrammaticNavRef = useRef(false);
   const targetNavigationFrameRef = useRef<number | null>(null);
   const videoPermanentlyStoppedRef = useRef(false);
+  const bootDoneRef = useRef<(() => void) | null>(null);
 
   // Simulated scrollback navigation state
   const navSimulationRef = useRef<{
@@ -1528,6 +1529,7 @@ function ScrollytellingEngine({
       if (bootTimeout) clearTimeout(bootTimeout);
       bootInterval = null;
       bootTimeout = null;
+      bootDoneRef.current = null;
       setIsReady(true);
       setLoadProgress(100);
       unlockScroll();
@@ -1536,6 +1538,8 @@ function ScrollytellingEngine({
       scheduleIdleStreamRef.current();
       videoRef.current?.play().catch(() => {});
     };
+
+    bootDoneRef.current = bootDone;
 
     bootInterval = setInterval(() => {
       if (isCancelled) return;
@@ -1553,6 +1557,7 @@ function ScrollytellingEngine({
 
     return () => {
       isCancelled = true;
+      bootDoneRef.current = null;
       if (bootInterval) clearInterval(bootInterval);
       if (bootTimeout) clearTimeout(bootTimeout);
       unlockScroll();
@@ -2107,10 +2112,26 @@ function ScrollytellingEngine({
     startSimulatedNavigation(630);
   }, [startSimulatedNavigation]);
 
+  const handleEnterExperience = useCallback(() => {
+    if (bootDoneRef.current) {
+      bootDoneRef.current();
+    } else {
+      setIsReady(true);
+      setLoadProgress(100);
+      document.documentElement.style.overflow = "";
+      drawFrameToCanvas(1);
+      videoRef.current?.play().catch(() => {});
+    }
+  }, [drawFrameToCanvas]);
+
   return (
     <>
       {/* Frame Loading Screen */}
-      <PreloadManager progress={loadProgress} isReady={isReady} />
+      <PreloadManager
+        progress={loadProgress}
+        isReady={isReady}
+        onEnter={handleEnterExperience}
+      />
 
       {/* Scrollable Track Element mapping page height to total frames */}
       <div

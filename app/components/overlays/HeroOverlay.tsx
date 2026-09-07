@@ -106,6 +106,16 @@ function HeroOverlay({
           </button>
         </div>
       </div>
+
+      {/* Bottom Scroll Indicator */}
+      <div className="absolute bottom-7 sm:bottom-9 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 pointer-events-none animate-fade-up delay-4 select-none">
+        <span className="font-mono text-[10px] sm:text-[11px] tracking-[0.25em] text-slate-400/90 uppercase drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
+          Scroll to experience
+        </span>
+        <div className="w-4 h-7 rounded-full border border-white/25 flex items-start justify-center p-1 bg-black/20 backdrop-blur-sm">
+          <div className="w-1 h-1.5 rounded-full bg-emerald-400 animate-bounce" />
+        </div>
+      </div>
     </div>
   );
 }
