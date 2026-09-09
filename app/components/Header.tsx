@@ -86,6 +86,24 @@ function Header({
         </nav>
       </div>
 
+      {/* Woxsen University Top-Right Corner Logo */}
+      <a
+        href="https://woxsen.edu.in"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="pointer-events-auto absolute top-3.5 sm:top-5 md:top-6 right-4 sm:right-8 md:right-10 flex items-center transition-all duration-200 group cursor-pointer opacity-95 hover:opacity-100 hover:scale-105"
+        title="Woxsen University Official Website"
+      >
+        <Image
+          src={getAssetUrl("/woxsen-logo.webp")}
+          alt="Woxsen University"
+          width={180}
+          height={83}
+          className="h-9 sm:h-12 md:h-14 lg:h-16 w-auto object-contain drop-shadow-[0_4px_16px_rgba(0,0,0,0.9)] group-hover:drop-shadow-[0_0_20px_rgba(238,73,92,0.6)] transition-all duration-200"
+          priority
+        />
+      </a>
+
       {/* Mobile Drawer */}
       {mobileMenuOpen && (
         <div className="md:hidden mt-3 p-4 rounded-2xl bg-slate-950/95 border border-white/15 backdrop-blur-2xl shadow-2xl flex flex-col gap-2 pointer-events-auto animate-in fade-in slide-in-from-top-4 duration-200 max-w-sm mx-auto">

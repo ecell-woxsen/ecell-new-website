@@ -11,6 +11,7 @@
     "pack:frames": "bun run scripts/pack-frames.ts",
     "pack:events": "bun run scripts/pack-events.ts",
     "pack:team": "bun run scripts/pack-team.ts",
+    "generate:woxsen-logo": "bun run scripts/generate-woxsen-logo.ts",
     "upload:r2": "bun run scripts/upload-to-r2.ts"
   },
   "dependencies": {

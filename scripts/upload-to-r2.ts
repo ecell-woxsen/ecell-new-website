@@ -187,6 +187,7 @@ async function main() {
     const sampleKeys = [
       "ecell-logo.png",
       "ecell-logo-v2.webp",
+      "woxsen-logo.webp",
       "still_shot.mp4",
       "events/hult.png",
       "ecell_packs/events_pack.bin",
