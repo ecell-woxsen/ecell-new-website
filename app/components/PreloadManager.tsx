@@ -12,8 +12,8 @@ interface PreloadManagerProps {
 }
 
 // Hard maximum threshold: Screen is mathematically guaranteed to dismiss well under 10 seconds.
-const HARD_WATCHDOG_MS = 6000;
-const SKIP_ENABLE_MS = 1200;
+const HARD_WATCHDOG_MS = 10000;
+const SKIP_ENABLE_MS = 1500;
 
 export default function PreloadManager({ progress, isReady, onEnter }: PreloadManagerProps) {
   const [visible, setVisible] = useState(true);
@@ -57,7 +57,7 @@ export default function PreloadManager({ progress, isReady, onEnter }: PreloadMa
     if (onEnter) onEnter();
   };
 
-  // Hard watchdog timer: GUARANTEE the screen dismisses under 6 seconds (strictly under 10s)
+  // Hard watchdog timer: GUARANTEE the screen dismisses under 10 seconds
   useEffect(() => {
     const watchdog = setTimeout(() => {
       if (!isReady && !hasExitedRef.current) {
@@ -80,14 +80,16 @@ export default function PreloadManager({ progress, isReady, onEnter }: PreloadMa
 
   if (!visible) return null;
 
-  // Telemetry status computation (clean, high-tech, zero fluff)
+  // Telemetry status computation (clean, high-tech, real disk cache feedback)
   const statusText =
     displayProgress >= 100 || isReady
-      ? "SYSTEM // READY"
-      : displayProgress > 60
-      ? "CANVAS // PRIMING"
-      : displayProgress > 25
-      ? "TIMELINE // BUFFERING"
+      ? "CACHE // READY"
+      : displayProgress > 75
+      ? "VERIFYING // 840 FRAMES"
+      : displayProgress > 45
+      ? "STREAMING // PACKS TO DISK"
+      : displayProgress > 15
+      ? "INITIALIZING // DISK CACHE"
       : "NETWORK // CONNECTING";
 
   return (

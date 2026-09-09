@@ -23,6 +23,11 @@ import {
 } from "../lib/assets";
 import { loadEventsPack } from "../lib/eventsPack";
 import { loadTeamPack } from "../lib/teamPack";
+import {
+  preloadAllPacks,
+  getFrameBlobFromCache,
+  unpackAndCacheFrames,
+} from "../lib/frameCache";
 
 interface ScrollytellingEngineProps {
   onFrameUpdate?: (frame: number) => void;
@@ -41,7 +46,7 @@ const SCROLL_TRACK_HEIGHT = TOTAL_FRAMES * 12; // 15,144px scroll track for 1:1 
 // Hero video covers frames 1-15, so the boot corridor only needs ~14 contiguous
 // frames before reveal (was 24 — the video hid most of them).
 const CRITICAL_PRELOAD_COUNT = 14;
-const BOOT_TIMEOUT_MS = 2500;
+const BOOT_TIMEOUT_MS = 12000;
 
 // Unified concurrency budget. On the R2 worker CDN (HTTP/2) 8 parallel streams
 // is comfortable; on an HTTP/1.1 fallback origin the browser queues these on
@@ -122,8 +127,8 @@ const getDecodeConcurrency = (): number => {
 // nearly free: the CDN serves immutable cache headers and every fetch uses
 // cache: "force-cache", so a re-fetch after eviction is a browser disk-cache
 // hit — no network round trip, no visible stall on scroll-back.
-const BLOB_WARM_PACK_RADIUS = 6; // idle warm corridor: ±6 packs (±96 frames)
-const BLOB_EVICT_PACK_RADIUS = 8; // hard eviction boundary: ±8 packs (±128 frames)
+const BLOB_WARM_PACK_RADIUS = 3; // idle warm corridor: ±3 packs (±48 frames)
+const BLOB_EVICT_PACK_RADIUS = 3; // hard eviction boundary: ±3 packs (±48 frames in RAM)
 
 // Failed-frame retry with exponential backoff (previously failures left
 // permanent holes that were re-fetched on every corridor pass).
@@ -747,14 +752,40 @@ function ScrollytellingEngine({
   const enqueueDecode = useCallback(
     (key: string, jumpQueue = false) => {
       if (decodeInflightRef.current.has(key) || decodeQueuedRef.current.has(key)) return;
-      if (!blobCacheRef.current.has(key) || bitmapCacheRef.current.has(key)) return;
+      if (bitmapCacheRef.current.has(key)) return;
       // Skip keys blocked by the breaker (repeated decode failures)
       const blocked = blockedKeysRef.current.get(key);
       if (blocked && Date.now() < blocked.until) return;
-      decodeQueuedRef.current.add(key);
-      if (jumpQueue) decodeQueueRef.current.unshift(key);
-      else decodeQueueRef.current.push(key);
-      pumpDecodeQueue();
+
+      if (blobCacheRef.current.has(key)) {
+        decodeQueuedRef.current.add(key);
+        if (jumpQueue) decodeQueueRef.current.unshift(key);
+        else decodeQueueRef.current.push(key);
+        pumpDecodeQueue();
+        return;
+      }
+
+      // If not in RAM, read frame from CacheStorage on disk in < 1ms
+      const variant = assetVariantRef.current;
+      const colon = key.indexOf(":");
+      const phys = parseInt(key.slice(colon + 1), 10);
+      if (!isNaN(phys)) {
+        getFrameBlobFromCache(phys, variant).then((diskBlob) => {
+          if (diskBlob && !unmountedRef.current && assetVariantRef.current === variant) {
+            blobCacheRef.current.set(key, diskBlob);
+            if (
+              !decodeInflightRef.current.has(key) &&
+              !decodeQueuedRef.current.has(key) &&
+              !bitmapCacheRef.current.has(key)
+            ) {
+              decodeQueuedRef.current.add(key);
+              if (jumpQueue) decodeQueueRef.current.unshift(key);
+              else decodeQueueRef.current.push(key);
+              pumpDecodeQueue();
+            }
+          }
+        }).catch(() => {});
+      }
     },
     [pumpDecodeQueue]
   );
@@ -918,6 +949,9 @@ function ScrollytellingEngine({
               }
               offset += len;
             }
+
+            // Persist to browser CacheStorage on disk
+            unpackAndCacheFrames(packIndex, buffer, variant).catch(() => {});
 
             endpointGuardRef.current.consecutive = 0;
             endpointGuardRef.current.backoffMs = ENDPOINT_BACKOFF_MIN_MS;
@@ -1513,21 +1547,12 @@ function ScrollytellingEngine({
     };
     lockScroll();
 
-    // Dispatch the boot corridor: if packs are enabled, Pack 0 contains frames
-    // 1-16 (covering CRITICAL_PRELOAD_COUNT = 14) in a single request.
-    if (noPacksRef.current) {
-      for (let i = 1; i <= CRITICAL_PRELOAD_COUNT; i++) {
-        dispatchFetch(i, "urgent");
-      }
-    } else {
-      dispatchPackFetch(0, "urgent");
-    }
+    // Dispatch immediate Pack 0 for zero-delay Frame 1 paint
+    dispatchPackFetch(0, "urgent");
 
     const bootDone = () => {
       if (isCancelled) return;
-      if (bootInterval) clearInterval(bootInterval);
       if (bootTimeout) clearTimeout(bootTimeout);
-      bootInterval = null;
       bootTimeout = null;
       bootDoneRef.current = null;
       setIsReady(true);
@@ -1541,24 +1566,29 @@ function ScrollytellingEngine({
 
     bootDoneRef.current = bootDone;
 
-    bootInterval = setInterval(() => {
-      if (isCancelled) return;
-      const variant = assetVariantRef.current;
-      let have = 0;
-      for (let i = 1; i <= CRITICAL_PRELOAD_COUNT; i++) {
-        if (blobCacheRef.current.has(`${variant}:${i}`)) have++;
-      }
-      setLoadProgress(Math.min(100, Math.round((have / CRITICAL_PRELOAD_COUNT) * 100)));
-      if (have >= CRITICAL_PRELOAD_COUNT) bootDone();
-    }, 100);
+    const preloadAbort = new AbortController();
+    const variant = assetVariantRef.current;
 
-    // Fast-boot timeout: never hold the splash longer than BOOT_TIMEOUT_MS
+    // Real preload pipeline: streams all 53 packs + aux packs into CacheStorage (disk)
+    preloadAllPacks(
+      variant,
+      ({ percent, isDone }) => {
+        if (isCancelled) return;
+        setLoadProgress(percent);
+        if (isDone) {
+          bootDone();
+        }
+      },
+      preloadAbort.signal
+    ).catch(() => {});
+
+    // Watchdog safety timeout: guarantees screen never freezes indefinitely on broken connections
     bootTimeout = setTimeout(bootDone, BOOT_TIMEOUT_MS);
 
     return () => {
       isCancelled = true;
+      preloadAbort.abort();
       bootDoneRef.current = null;
-      if (bootInterval) clearInterval(bootInterval);
       if (bootTimeout) clearTimeout(bootTimeout);
       unlockScroll();
       if (idleHandleRef.current !== null) {
@@ -1584,7 +1614,7 @@ function ScrollytellingEngine({
       endpointGuardRef.current = { pausedUntil: 0, backoffMs: ENDPOINT_BACKOFF_MIN_MS, consecutive: 0 };
       unmountedRef.current = true;
     };
-  }, [dispatchFetch, dispatchPackFetch, drawFrameToCanvas]);
+  }, [dispatchPackFetch, drawFrameToCanvas]);
 
   // =========================================================================
   // SIMULATED SCROLLBACK DRIVER
