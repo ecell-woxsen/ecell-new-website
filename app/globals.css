@@ -19,8 +19,10 @@
 :root {
   --ink: #040608;
   --white: #ffffff;
-  --green-lt: #3fb950;
-  --green-primary: #16a34a;
+  --woxsen-red: #ee495c;
+  --woxsen-red-hover: #ff5a6e;
+  --woxsen-red-dark: #cc2b3e;
+  --woxsen-red-soft: rgba(238, 73, 92, 0.15);
   --font-bebas: "Bebas Neue", sans-serif;
   --font-dm-sans: var(--font-bebas), "Bebas Neue", sans-serif;
   --font-space-mono: var(--font-bebas), "Bebas Neue", sans-serif;
@@ -129,7 +131,7 @@ h1, h2, h3, h4, h5, h6, .font-heading {
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(16, 185, 129, 0.4);
+  background: rgba(238, 73, 92, 0.5);
 }
 
 /* High-Performance Clean Glass Panels (Zero motion blur & GPU shader lag) */
@@ -144,7 +146,7 @@ h1, h2, h3, h4, h5, h6, .font-heading {
   border: 1px solid rgba(255, 255, 255, 0.14);
   box-shadow: 
     0 25px 60px -15px rgba(0, 0, 0, 0.8),
-    0 0 35px rgba(16, 185, 129, 0.08),
+    0 0 35px rgba(238, 73, 92, 0.12),
     inset 0 1px 1px rgba(255, 255, 255, 0.15);
 }
 
@@ -159,10 +161,10 @@ h1, h2, h3, h4, h5, h6, .font-heading {
 }
 
 .glass-wall-card:hover {
-  border-color: rgba(52, 211, 153, 0.35);
+  border-color: rgba(238, 73, 92, 0.45);
   box-shadow: 
     0 30px 60px -15px rgba(0, 0, 0, 0.95),
-    0 0 30px rgba(52, 211, 153, 0.15),
+    0 0 30px rgba(238, 73, 92, 0.2),
     inset 0 1px 0 rgba(255, 255, 255, 0.25);
 }
 
@@ -182,17 +184,17 @@ h1, h2, h3, h4, h5, h6, .font-heading {
 }
 
 .gallery-event-card[data-active="true"] .event-card-image {
-  border-color: rgba(52, 211, 153, 0.6) !important;
-  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.92), 0 0 32px rgba(52, 211, 153, 0.22) !important;
+  border-color: rgba(238, 73, 92, 0.65) !important;
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.92), 0 0 32px rgba(238, 73, 92, 0.25) !important;
 }
 
 .gallery-event-card[data-active="true"] .event-card-dot {
-  background-color: rgb(52, 211, 153) !important;
-  box-shadow: 0 0 10px rgba(52, 211, 153, 0.9) !important;
+  background-color: rgb(238, 73, 92) !important;
+  box-shadow: 0 0 10px rgba(238, 73, 92, 0.9) !important;
 }
 
 .gallery-event-card[data-active="true"] .event-card-label {
-  color: rgb(52, 211, 153) !important;
+  color: rgb(238, 73, 92) !important;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.95)) !important;
 }
 
@@ -211,12 +213,12 @@ h1, h2, h3, h4, h5, h6, .font-heading {
 }
 
 .gallery-team-hero[data-active="true"] .team-hero-dot {
-  background-color: rgb(52, 211, 153) !important;
-  box-shadow: 0 0 10px rgba(52, 211, 153, 0.9) !important;
+  background-color: rgb(238, 73, 92) !important;
+  box-shadow: 0 0 10px rgba(238, 73, 92, 0.9) !important;
 }
 
 .gallery-team-hero[data-active="true"] .team-hero-label {
-  color: rgb(52, 211, 153) !important;
+  color: rgb(238, 73, 92) !important;
 }
 
 .gallery-team-hero[data-active="true"] .team-hero-name {
@@ -224,16 +226,16 @@ h1, h2, h3, h4, h5, h6, .font-heading {
 }
 
 .gallery-team-hero[data-active="true"] .team-hero-role {
-  color: rgb(52, 211, 153) !important;
+  color: rgb(238, 73, 92) !important;
 }
 
 .gallery-team-hero[data-active="true"] .team-portrait-surface {
-  border-color: rgba(52, 211, 153, 0.45) !important;
-  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.92), 0 0 28px rgba(52, 211, 153, 0.16) !important;
+  border-color: rgba(238, 73, 92, 0.5) !important;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.92), 0 0 28px rgba(238, 73, 92, 0.2) !important;
 }
 
 .gallery-team-hero[data-active="true"] .team-monogram {
-  color: rgba(110, 231, 183, 0.9) !important;
+  color: rgba(255, 255, 255, 0.95) !important;
   opacity: 0.98 !important;
 }
 
@@ -242,12 +244,12 @@ h1, h2, h3, h4, h5, h6, .font-heading {
 }
 
 .gallery-team-hero .group:hover .team-hero-dot {
-  background-color: rgb(52, 211, 153) !important;
-  box-shadow: 0 0 10px rgba(52, 211, 153, 0.9) !important;
+  background-color: rgb(238, 73, 92) !important;
+  box-shadow: 0 0 10px rgba(238, 73, 92, 0.9) !important;
 }
 
 .gallery-team-hero .group:hover .team-hero-label {
-  color: rgb(52, 211, 153) !important;
+  color: rgb(238, 73, 92) !important;
 }
 
 .gallery-team-hero .group:hover .team-hero-name {
@@ -255,12 +257,12 @@ h1, h2, h3, h4, h5, h6, .font-heading {
 }
 
 .gallery-team-hero .group:hover .team-hero-role {
-  color: rgb(52, 211, 153) !important;
+  color: rgb(238, 73, 92) !important;
 }
 
 .gallery-team-hero .group:hover .team-portrait-surface {
-  border-color: rgba(52, 211, 153, 0.45) !important;
-  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.92), 0 0 28px rgba(52, 211, 153, 0.16) !important;
+  border-color: rgba(238, 73, 92, 0.5) !important;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.92), 0 0 28px rgba(238, 73, 92, 0.2) !important;
 }
 
 .gallery-team-col {
@@ -273,12 +275,12 @@ h1, h2, h3, h4, h5, h6, .font-heading {
 }
 
 .gallery-team-col[data-active="true"] .team-col-dot {
-  background-color: rgb(52, 211, 153) !important;
-  box-shadow: 0 0 10px rgba(52, 211, 153, 0.9) !important;
+  background-color: rgb(238, 73, 92) !important;
+  box-shadow: 0 0 10px rgba(238, 73, 92, 0.9) !important;
 }
 
 .gallery-team-col[data-active="true"] .team-col-label {
-  color: rgb(52, 211, 153) !important;
+  color: rgb(238, 73, 92) !important;
 }
 
 .gallery-team-col[data-active="true"] .team-col-name {
@@ -286,16 +288,16 @@ h1, h2, h3, h4, h5, h6, .font-heading {
 }
 
 .gallery-team-col[data-active="true"] .team-col-role {
-  color: rgb(52, 211, 153) !important;
+  color: rgb(238, 73, 92) !important;
 }
 
 .gallery-team-col[data-active="true"] .team-portrait-surface {
-  border-color: rgba(52, 211, 153, 0.45) !important;
-  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.92), 0 0 28px rgba(52, 211, 153, 0.16) !important;
+  border-color: rgba(238, 73, 92, 0.5) !important;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.92), 0 0 28px rgba(238, 73, 92, 0.2) !important;
 }
 
 .gallery-team-col[data-active="true"] .team-monogram {
-  color: rgba(110, 231, 183, 0.9) !important;
+  color: rgba(255, 255, 255, 0.95) !important;
   opacity: 0.98 !important;
 }
 
@@ -304,12 +306,12 @@ h1, h2, h3, h4, h5, h6, .font-heading {
 }
 
 .gallery-team-col .group:hover .team-col-dot {
-  background-color: rgb(52, 211, 153) !important;
-  box-shadow: 0 0 10px rgba(52, 211, 153, 0.9) !important;
+  background-color: rgb(238, 73, 92) !important;
+  box-shadow: 0 0 10px rgba(238, 73, 92, 0.9) !important;
 }
 
 .gallery-team-col .group:hover .team-col-label {
-  color: rgb(52, 211, 153) !important;
+  color: rgb(238, 73, 92) !important;
 }
 
 .gallery-team-col .group:hover .team-col-name {
@@ -317,12 +319,12 @@ h1, h2, h3, h4, h5, h6, .font-heading {
 }
 
 .gallery-team-col .group:hover .team-col-role {
-  color: rgb(52, 211, 153) !important;
+  color: rgb(238, 73, 92) !important;
 }
 
 .gallery-team-col .group:hover .team-portrait-surface {
-  border-color: rgba(52, 211, 153, 0.45) !important;
-  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.92), 0 0 28px rgba(52, 211, 153, 0.16) !important;
+  border-color: rgba(238, 73, 92, 0.5) !important;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.92), 0 0 28px rgba(238, 73, 92, 0.2) !important;
 }
 
 /* Fallback only for small laptop viewports under 740px */

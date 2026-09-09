@@ -93,7 +93,7 @@ export default function ContactWallSection({
           background: `
             radial-gradient(ellipse at 20% 50%, rgba(3, 6, 10, 0.85) 0%, rgba(3, 6, 10, 0.55) 50%, transparent 80%),
             radial-gradient(ellipse at 80% 50%, rgba(3, 6, 10, 0.85) 0%, rgba(3, 6, 10, 0.55) 50%, transparent 80%),
-            radial-gradient(ellipse at 50% 20%, rgba(255, 255, 255, 0.08) 0%, rgba(52, 211, 153, 0.03) 40%, transparent 75%)
+            radial-gradient(ellipse at 50% 20%, rgba(255, 255, 255, 0.08) 0%, rgba(238, 73, 92, 0.04) 40%, transparent 75%)
           `,
         }}
         aria-hidden="true"
@@ -105,8 +105,8 @@ export default function ContactWallSection({
       <div className="relative z-10 flex items-center justify-between gap-4 mb-6 pb-4 border-b border-white/20">
         {/* Eyebrow Label (Exact match to ABOUT) */}
         <div className="flex items-center gap-3 h-6">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.7)]" />
-          <span className="font-mono text-[11px] sm:text-xs font-semibold tracking-[0.22em] uppercase text-emerald-400 drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
+          <span className="w-2 h-2 rounded-full bg-[#ee495c] shadow-[0_0_8px_rgba(238,73,92,0.7)]" />
+          <span className="font-mono text-[11px] sm:text-xs font-semibold tracking-[0.22em] uppercase text-[#ee495c] drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
             03 — GET IN TOUCH
           </span>
           <span className="h-px w-8 bg-white/25" />
@@ -114,7 +114,7 @@ export default function ContactWallSection({
 
         {/* Minimalist Upper-Right Metadata */}
         <div className="flex items-center gap-2 font-mono text-[11px] tracking-[0.22em] uppercase text-slate-300 drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
-          <span className="text-emerald-400 font-semibold">HYDERABAD</span>
+          <span className="text-[#ee495c] font-semibold">HYDERABAD</span>
           <span className="text-white/40">·</span>
           <span>INDIA</span>
         </div>
@@ -132,7 +132,7 @@ export default function ContactWallSection({
           <h2 className="font-display text-5xl sm:text-6xl lg:text-7xl xl:text-[80px] text-slate-50 tracking-[-0.01em] uppercase leading-[0.90] mb-5 drop-shadow-[0_4px_24px_rgba(0,0,0,0.98)]">
             CONNECT
             <br />
-            <span className="text-emerald-400">WITH US.</span>
+            <span className="text-[#ee495c]">WITH US.</span>
           </h2>
 
           {/* Short Narrative Statement */}
@@ -144,12 +144,12 @@ export default function ContactWallSection({
           <div className="space-y-4 max-w-[440px] select-text">
             {/* Email */}
             <div className="pb-3 border-b border-white/20">
-              <span className="block font-mono text-[10px] sm:text-[11px] font-semibold tracking-[0.2em] text-emerald-400 uppercase mb-1 drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
+              <span className="block font-mono text-[10px] sm:text-[11px] font-semibold tracking-[0.2em] text-[#ee495c] uppercase mb-1 drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
                 EMAIL US
               </span>
               <a
                 href="mailto:ecell@woxsen.edu.in"
-                className="font-display text-lg sm:text-xl text-white hover:text-emerald-300 transition-colors uppercase tracking-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)]"
+                className="font-display text-lg sm:text-xl text-white hover:text-[#ff7686] transition-colors uppercase tracking-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)]"
               >
                 ecell@woxsen.edu.in
               </a>
@@ -157,12 +157,12 @@ export default function ContactWallSection({
 
             {/* Call Office */}
             <div className="pb-3 border-b border-white/20">
-              <span className="block font-mono text-[10px] sm:text-[11px] font-semibold tracking-[0.2em] text-emerald-400 uppercase mb-1 drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
+              <span className="block font-mono text-[10px] sm:text-[11px] font-semibold tracking-[0.2em] text-[#ee495c] uppercase mb-1 drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
                 CALL OFFICE
               </span>
               <a
                 href="tel:+918008627493"
-                className="font-display text-lg sm:text-xl text-white hover:text-teal-300 transition-colors tracking-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)] block"
+                className="font-display text-lg sm:text-xl text-white hover:text-[#ff7686] transition-colors tracking-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)] block"
               >
                 +91 80086 27493
               </a>
@@ -173,7 +173,7 @@ export default function ContactWallSection({
 
             {/* Campus */}
             <div className="pb-3 border-b border-white/20">
-              <span className="block font-mono text-[10px] sm:text-[11px] font-semibold tracking-[0.2em] text-emerald-400 uppercase mb-1 drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
+              <span className="block font-mono text-[10px] sm:text-[11px] font-semibold tracking-[0.2em] text-[#ee495c] uppercase mb-1 drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
                 CAMPUS LOCATION
               </span>
               <p className="font-display text-base sm:text-lg text-white uppercase tracking-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)]">
@@ -194,7 +194,7 @@ export default function ContactWallSection({
                   href="https://www.linkedin.com/school/woxsen-university/"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-slate-200 hover:text-emerald-400 transition-colors flex items-center gap-1 group drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]"
+                  className="text-slate-200 hover:text-[#ff7686] transition-colors flex items-center gap-1 group drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]"
                 >
                   <span>LinkedIn</span>
                   <ArrowUpRight className="w-3 h-3 opacity-60 group-hover:opacity-100 transition-opacity" />
@@ -204,7 +204,7 @@ export default function ContactWallSection({
                   href="https://instagram.com/ecell_wou"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-slate-200 hover:text-pink-400 transition-colors flex items-center gap-1 group drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]"
+                  className="text-slate-200 hover:text-[#ff7686] transition-colors flex items-center gap-1 group drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]"
                 >
                   <span>Instagram</span>
                   <ArrowUpRight className="w-3 h-3 opacity-60 group-hover:opacity-100 transition-opacity" />
@@ -214,7 +214,7 @@ export default function ContactWallSection({
                   href="https://woxsen.edu.in/ecell"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-slate-200 hover:text-white transition-colors flex items-center gap-1 group drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]"
+                  className="text-slate-200 hover:text-[#ff7686] transition-colors flex items-center gap-1 group drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]"
                 >
                   <span>Woxsen</span>
                   <ArrowUpRight className="w-3 h-3 opacity-60 group-hover:opacity-100 transition-opacity" />
@@ -230,15 +230,15 @@ export default function ContactWallSection({
         <div className="w-full max-w-[460px] md:ml-auto flex flex-col justify-start">
           {/* Form Header Eyebrow */}
           <div className="flex items-center gap-2 h-6 mb-5">
-            <span className="font-mono text-[11px] sm:text-xs font-semibold tracking-[0.22em] uppercase text-emerald-400 drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
+            <span className="font-mono text-[11px] sm:text-xs font-semibold tracking-[0.22em] uppercase text-[#ee495c] drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
               {"// DIRECT INQUIRY"}
             </span>
           </div>
 
           {sent ? (
             <div className="h-full min-h-[320px] flex flex-col items-start justify-center text-left py-6 select-none animate-in fade-in duration-300">
-              <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center mb-3">
-                <CheckCircle2 className="w-6 h-6 text-emerald-400" />
+              <div className="w-12 h-12 rounded-full bg-[#ee495c]/10 border border-[#ee495c]/30 flex items-center justify-center mb-3">
+                <CheckCircle2 className="w-6 h-6 text-[#ee495c]" />
               </div>
               <h3 className="font-display text-2xl sm:text-3xl text-white uppercase tracking-tight drop-shadow-[0_2px_10px_rgba(0,0,0,0.98)]">
                 Message Sent
@@ -249,7 +249,7 @@ export default function ContactWallSection({
               <button
                 type="button"
                 onClick={() => setSent(false)}
-                className="mt-6 font-mono text-[11px] tracking-[0.16em] uppercase text-emerald-400 hover:text-emerald-300 underline underline-offset-4 cursor-pointer transition-colors"
+                className="mt-6 font-mono text-[11px] tracking-[0.16em] uppercase text-[#ee495c] hover:text-[#ff7686] underline underline-offset-4 cursor-pointer transition-colors"
               >
                 ← Send Another Message
               </button>
@@ -279,8 +279,8 @@ export default function ContactWallSection({
               )}
 
               {/* Field 1: Name */}
-              <div className="border-b border-white/30 pb-2.5 focus-within:border-emerald-400 transition-colors">
-                <label className="block font-mono text-[10px] sm:text-[11px] tracking-[0.2em] uppercase text-emerald-400 font-semibold mb-1 drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
+              <div className="border-b border-white/30 pb-2.5 focus-within:border-[#ee495c] transition-colors">
+                <label className="block font-mono text-[10px] sm:text-[11px] tracking-[0.2em] uppercase text-[#ee495c] font-semibold mb-1 drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
                   YOUR NAME
                 </label>
                 <input
@@ -297,8 +297,8 @@ export default function ContactWallSection({
               </div>
 
               {/* Field 2: Email */}
-              <div className="border-b border-white/30 pb-2.5 focus-within:border-emerald-400 transition-colors">
-                <label className="block font-mono text-[10px] sm:text-[11px] tracking-[0.2em] uppercase text-emerald-400 font-semibold mb-1 drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
+              <div className="border-b border-white/30 pb-2.5 focus-within:border-[#ee495c] transition-colors">
+                <label className="block font-mono text-[10px] sm:text-[11px] tracking-[0.2em] uppercase text-[#ee495c] font-semibold mb-1 drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
                   YOUR EMAIL
                 </label>
                 <input
@@ -315,9 +315,9 @@ export default function ContactWallSection({
               </div>
 
               {/* Field 3: Message */}
-              <div className="border-b border-white/30 pb-2.5 focus-within:border-emerald-400 transition-colors">
+              <div className="border-b border-white/30 pb-2.5 focus-within:border-[#ee495c] transition-colors">
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block font-mono text-[10px] sm:text-[11px] tracking-[0.2em] uppercase text-emerald-400 font-semibold drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
+                  <label className="block font-mono text-[10px] sm:text-[11px] tracking-[0.2em] uppercase text-[#ee495c] font-semibold drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
                     MESSAGE
                   </label>
                   {message.length > 0 && (
@@ -338,12 +338,12 @@ export default function ContactWallSection({
                 />
               </div>
 
-              {/* Submit Action (Restrained, solid emerald button) */}
+              {/* Submit Action (Restrained, solid Woxsen red button) */}
               <div className="flex justify-end pt-2">
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-7 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-60 disabled:cursor-not-allowed text-slate-950 font-bold font-mono text-xs uppercase tracking-[0.18em] flex items-center gap-2 transition-all cursor-pointer shadow-lg shadow-emerald-500/25 active:scale-[0.98]"
+                  className="px-7 py-3 rounded-xl bg-[#ee495c] hover:bg-[#ff5a6e] disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold font-mono text-xs uppercase tracking-[0.18em] flex items-center gap-2 transition-all cursor-pointer shadow-lg shadow-[#ee495c]/30 active:scale-[0.98]"
                 >
                   {submitting ? (
                     <>

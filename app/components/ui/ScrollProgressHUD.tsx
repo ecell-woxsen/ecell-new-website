@@ -40,8 +40,8 @@ function ScrollProgressHUD({
   return (
     <div className="fixed bottom-6 right-6 z-40 flex items-center gap-3 px-4 py-2 rounded-full bg-slate-950/75 border border-white/10 backdrop-blur-xl shadow-2xl pointer-events-none transition-opacity duration-300">
       <div className="flex items-center gap-2">
-        <Compass className="w-3.5 h-3.5 text-emerald-400 animate-spin-slow" />
-        <span className="text-[10px] font-mono text-emerald-400 font-semibold tracking-wider">
+        <Compass className="w-3.5 h-3.5 text-[#ee495c] animate-spin-slow" />
+        <span className="text-[10px] font-mono text-[#ee495c] font-semibold tracking-wider">
           CH {chapterIndex}
         </span>
         <span className="text-slate-500 text-xs">/</span>
@@ -60,7 +60,7 @@ function ScrollProgressHUD({
       {/* Mini Progress Bar */}
       <div className="w-12 h-1 bg-white/10 rounded-full overflow-hidden">
         <div
-          className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-150 rounded-full"
+          className="h-full bg-gradient-to-r from-[#cc2b3e] to-[#ee495c] transition-all duration-150 rounded-full shadow-[0_0_6px_#ee495c]"
           style={{ width: `${progressPercent}%` }}
         />
       </div>

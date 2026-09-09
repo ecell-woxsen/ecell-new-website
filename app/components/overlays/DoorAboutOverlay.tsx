@@ -49,8 +49,8 @@ function DoorAboutOverlay({}: DoorAboutOverlayProps) {
         <div className="w-full max-w-[450px] lg:max-w-[480px] text-left flex flex-col justify-start">
           {/* Level 1: Section Label (Aligned horizontally with right side) */}
           <div className="flex items-center gap-3 h-6 mb-4 sm:mb-5">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]" />
-            <span className="font-mono text-[11px] sm:text-xs font-semibold tracking-[0.22em] uppercase text-emerald-400 drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
+            <span className="w-2 h-2 rounded-full bg-[#ee495c] shadow-[0_0_8px_rgba(238,73,92,0.6)]" />
+            <span className="font-mono text-[11px] sm:text-xs font-semibold tracking-[0.22em] uppercase text-[#ee495c] drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
               WHO WE ARE
             </span>
             <span className="h-px w-8 bg-white/25" />
@@ -60,7 +60,7 @@ function DoorAboutOverlay({}: DoorAboutOverlayProps) {
           <h2 className="font-display text-5xl sm:text-6xl lg:text-7xl xl:text-[80px] text-slate-50 tracking-[-0.01em] uppercase leading-[0.90] mb-6 sm:mb-7 drop-shadow-[0_4px_24px_rgba(0,0,0,0.98)]">
             A VISION.
             <br />
-            <span className="text-emerald-400">A MOVEMENT.</span>
+            <span className="text-[#ee495c]">A MOVEMENT.</span>
           </h2>
 
           {/* Level 3: Short Supporting Editorial Paragraph (High Readability) */}
@@ -110,10 +110,10 @@ function DoorAboutOverlay({}: DoorAboutOverlayProps) {
         {/* COLUMN 3: RIGHT SIDE — MISSION & PILLARS                                  */}
         {/* ========================================================================= */}
         <div className="w-full max-w-[450px] lg:max-w-[480px] text-left flex flex-col justify-start">
-          {/* Level 1: Section Label (Aligned horizontally with left side) */}
+          {/* Level 1: Section Label (Aligned horizontally with right side) */}
           <div className="flex items-center gap-3 h-6 mb-4 sm:mb-5">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]" />
-            <span className="font-mono text-[11px] sm:text-xs font-semibold tracking-[0.22em] uppercase text-emerald-400 drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
+            <span className="w-2 h-2 rounded-full bg-[#ee495c] shadow-[0_0_8px_rgba(238,73,92,0.6)]" />
+            <span className="font-mono text-[11px] sm:text-xs font-semibold tracking-[0.22em] uppercase text-[#ee495c] drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
               MISSION & PILLARS
             </span>
             <span className="h-px w-8 bg-white/25" />
@@ -123,7 +123,7 @@ function DoorAboutOverlay({}: DoorAboutOverlayProps) {
           <h2 className="font-display text-5xl sm:text-6xl lg:text-7xl xl:text-[80px] text-slate-50 tracking-[-0.01em] uppercase leading-[0.90] mb-6 sm:mb-7 drop-shadow-[0_4px_24px_rgba(0,0,0,0.98)]">
             IGNITING
             <br />
-            <span className="text-emerald-400">INNOVATION.</span>
+            <span className="text-[#ee495c]">INNOVATION.</span>
           </h2>
 
           {/* Level 3: Short Supporting Mission Statement (High Readability) */}
@@ -136,7 +136,7 @@ function DoorAboutOverlay({}: DoorAboutOverlayProps) {
             <div className="grid grid-cols-2 gap-x-6 gap-y-4">
               <div>
                 <div className="flex items-baseline gap-2 mb-1">
-                  <span className="font-mono text-xs font-bold text-emerald-400">01</span>
+                  <span className="font-mono text-xs font-bold text-[#ee495c]">01</span>
                   <span className="font-mono text-[12px] sm:text-[13px] font-bold text-white uppercase tracking-wider drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]">
                     INSPIRE
                   </span>
@@ -148,7 +148,7 @@ function DoorAboutOverlay({}: DoorAboutOverlayProps) {
 
               <div>
                 <div className="flex items-baseline gap-2 mb-1">
-                  <span className="font-mono text-xs font-bold text-emerald-400">02</span>
+                  <span className="font-mono text-xs font-bold text-[#ee495c]">02</span>
                   <span className="font-mono text-[12px] sm:text-[13px] font-bold text-white uppercase tracking-wider drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]">
                     BUILD
                   </span>
@@ -160,7 +160,7 @@ function DoorAboutOverlay({}: DoorAboutOverlayProps) {
 
               <div>
                 <div className="flex items-baseline gap-2 mb-1">
-                  <span className="font-mono text-xs font-bold text-emerald-400">03</span>
+                  <span className="font-mono text-xs font-bold text-[#ee495c]">03</span>
                   <span className="font-mono text-[12px] sm:text-[13px] font-bold text-white uppercase tracking-wider drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]">
                     CONNECT
                   </span>
@@ -172,7 +172,7 @@ function DoorAboutOverlay({}: DoorAboutOverlayProps) {
 
               <div>
                 <div className="flex items-baseline gap-2 mb-1">
-                  <span className="font-mono text-xs font-bold text-emerald-400">04</span>
+                  <span className="font-mono text-xs font-bold text-[#ee495c]">04</span>
                   <span className="font-mono text-[12px] sm:text-[13px] font-bold text-white uppercase tracking-wider drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]">
                     CATALYSE
                   </span>

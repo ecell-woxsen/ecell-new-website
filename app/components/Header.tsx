@@ -44,7 +44,7 @@ function Header({
               className="w-7 h-7 sm:w-8 sm:h-8 object-contain transition-transform duration-200 group-hover:scale-105"
               priority
             />
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="w-1.5 h-1.5 rounded-full bg-[#ee495c] animate-pulse" />
           </button>
 
           <div className="h-4 w-px bg-white/15 hidden sm:block" />
@@ -57,8 +57,8 @@ function Header({
                 onClick={() => onNavigateToFrame(item.frame)}
                 className={`px-3 py-1 rounded-full text-xs font-mono font-medium tracking-wider uppercase transition-all duration-200 cursor-pointer ${
                   item.active
-                    ? "text-emerald-400 bg-white/10"
-                    : "text-slate-300 hover:text-white hover:bg-white/5"
+                    ? "text-white bg-[#ee495c]/25 border border-[#ee495c]/40 shadow-[0_0_12px_rgba(238,73,92,0.25)]"
+                    : "text-slate-300 hover:text-white hover:bg-[#ee495c]/15"
                 }`}
               >
                 {item.label}
@@ -69,7 +69,7 @@ function Header({
           {/* Submit Idea Action Button */}
           <button
             onClick={onOpenJoinModal}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-mono font-bold tracking-wider uppercase bg-[#16a34a] hover:bg-[#22c55e] text-white shadow-md transition-all hover:scale-105 active:scale-95 cursor-pointer ml-1"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-mono font-bold tracking-wider uppercase bg-[#ee495c] hover:bg-[#ff5a6e] text-white shadow-md shadow-[#ee495c]/35 transition-all hover:scale-105 active:scale-95 cursor-pointer ml-1"
           >
             <span>SUBMIT IDEA</span>
             <ArrowRight className="w-3 h-3" />
@@ -98,8 +98,8 @@ function Header({
               }}
               className={`text-left px-4 py-2.5 rounded-xl text-xs font-mono font-semibold tracking-wider uppercase transition-all ${
                 item.active
-                  ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                  : "text-slate-300 hover:bg-white/5"
+                  ? "bg-[#ee495c]/20 text-white border border-[#ee495c]/40"
+                  : "text-slate-300 hover:text-white hover:bg-[#ee495c]/15"
               }`}
             >
               {item.label}

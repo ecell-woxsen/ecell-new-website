@@ -57,7 +57,7 @@ function HeroOverlay({
             {part2.split("").map((char, index) => (
               <span
                 key={`p2-${index}`}
-                className="inline-block text-[#3fb950] animate-letter-reveal text-[1.25em]"
+                className="inline-block text-[#ee495c] animate-letter-reveal text-[1.25em] drop-shadow-[0_0_24px_rgba(238,73,92,0.4)]"
                 style={{
                   animationDelay: `${(part1.length + index) * 0.04}s`,
                   whiteSpace: char === " " ? "pre" : "normal",
@@ -93,14 +93,14 @@ function HeroOverlay({
         <div className="flex items-center justify-center gap-4 animate-fade-up delay-4 max-sm:flex-col max-sm:w-full font-mono">
           <button
             onClick={onExploreClick}
-            className="px-7 py-3 rounded-full bg-[#16a34a] hover:bg-[#22c55e] text-white text-xs sm:text-sm font-bold tracking-wider uppercase shadow-lg shadow-emerald-950/40 transition-all hover:scale-105 active:scale-95 cursor-pointer max-sm:w-full"
+            className="px-7 py-3 rounded-full bg-[#ee495c] hover:bg-[#ff5a6e] text-white text-xs sm:text-sm font-bold tracking-wider uppercase shadow-lg shadow-[#ee495c]/35 transition-all hover:scale-105 active:scale-95 cursor-pointer max-sm:w-full"
           >
             Explore Events
           </button>
 
           <button
             onClick={onOpenJoinModal}
-            className="px-7 py-3 rounded-full bg-black/40 hover:bg-black/60 text-slate-200 hover:text-white text-xs sm:text-sm font-bold tracking-wider uppercase border border-white/20 hover:border-white/40 backdrop-blur-md transition-all hover:scale-105 active:scale-95 cursor-pointer max-sm:w-full"
+            className="px-7 py-3 rounded-full bg-black/40 hover:bg-[#ee495c]/15 text-slate-200 hover:text-white text-xs sm:text-sm font-bold tracking-wider uppercase border border-white/20 hover:border-[#ee495c]/50 backdrop-blur-md transition-all hover:scale-105 active:scale-95 cursor-pointer max-sm:w-full"
           >
             Submit Your Idea
           </button>
@@ -113,7 +113,7 @@ function HeroOverlay({
           Scroll to experience
         </span>
         <div className="w-4 h-7 rounded-full border border-white/25 flex items-start justify-center p-1 bg-black/20 backdrop-blur-sm">
-          <div className="w-1 h-1.5 rounded-full bg-emerald-400 animate-bounce" />
+          <div className="w-1 h-1.5 rounded-full bg-[#ee495c] animate-bounce shadow-[0_0_6px_#ee495c]" />
         </div>
       </div>
     </div>

@@ -31,7 +31,7 @@ export default function Home() {
   }, []);
 
   return (
-    <main className="relative bg-[#040608] text-slate-100 selection:bg-emerald-500/30 selection:text-emerald-200 min-h-screen">
+    <main className="relative bg-[#040608] text-slate-100 selection:bg-[#ee495c]/30 selection:text-white min-h-screen">
       {/* Floating Header */}
       <Header
         currentFrame={currentFrame}

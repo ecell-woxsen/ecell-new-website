@@ -217,7 +217,7 @@ function EditorialPortraitSurface({
 }) {
   return (
     <div
-      className={`team-portrait-surface relative overflow-hidden rounded-2xl border border-white/15 shadow-[0_25px_60px_rgba(0,0,0,0.9)] bg-gradient-to-b from-[#181d26] via-[#0f131a] to-[#080b10] flex items-center justify-center select-none group-hover:border-emerald-400/40 transition-all duration-500 ${className}`}
+      className={`team-portrait-surface relative overflow-hidden rounded-2xl border border-white/15 shadow-[0_25px_60px_rgba(0,0,0,0.9)] bg-gradient-to-b from-[#181d26] via-[#0f131a] to-[#080b10] flex items-center justify-center select-none group-hover:border-[#ee495c]/50 transition-all duration-500 ${className}`}
     >
       {/* Studio Softbox Keylight from Top-Left (GPU-performant radial gradient, 0 blur kernels) */}
       <div
@@ -231,7 +231,7 @@ function EditorialPortraitSurface({
       <div
         className="absolute -bottom-10 -right-10 w-48 h-48 rounded-full pointer-events-none"
         style={{
-          background: "radial-gradient(circle, rgba(52, 211, 153, 0.06) 0%, rgba(52, 211, 153, 0.015) 45%, transparent 70%)",
+          background: "radial-gradient(circle, rgba(238, 73, 92, 0.06) 0%, rgba(238, 73, 92, 0.015) 45%, transparent 70%)",
         }}
       />
 
@@ -248,7 +248,7 @@ function EditorialPortraitSurface({
       ) : (
         /* Minimalist Editorial Monogram Silhouette Fallback */
         <div className="relative z-10 flex flex-col items-center justify-center p-6 text-center transition-all duration-500">
-          <span className="team-monogram font-display text-3xl sm:text-4xl tracking-wider uppercase text-slate-100/40 group-hover:text-emerald-300/60 transition-all drop-shadow-md">
+          <span className="team-monogram font-display text-3xl sm:text-4xl tracking-wider uppercase text-slate-100/40 group-hover:text-[#ff7686] transition-all drop-shadow-md">
             {name.charAt(0)}
           </span>
         </div>
@@ -325,8 +325,8 @@ export default function TeamWallSection({
         <div>
           {/* Level 1: Monospace Indexing */}
           <div className="flex items-center gap-3 h-6 mb-5">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.7)]" />
-            <span className="font-mono text-[11px] sm:text-xs font-semibold tracking-[0.25em] uppercase text-emerald-400 drop-shadow-[0_2px_6px_rgba(0,0,0,0.95)]">
+            <span className="w-2 h-2 rounded-full bg-[#ee495c] shadow-[0_0_8px_rgba(238,73,92,0.7)]" />
+            <span className="font-mono text-[11px] sm:text-xs font-semibold tracking-[0.25em] uppercase text-[#ee495c] drop-shadow-[0_2px_6px_rgba(0,0,0,0.95)]">
               02 — LEADERSHIP & MENTORSHIP
             </span>
             <span className="h-px w-10 bg-white/20" />
@@ -350,7 +350,7 @@ export default function TeamWallSection({
           <span className="font-mono text-[10px] sm:text-[11px] tracking-[0.25em] uppercase text-slate-400">
             2025 — 2026 COHORT
           </span>
-          <span className="font-mono text-[10px] text-emerald-400/80 uppercase">
+          <span className="font-mono text-[10px] text-[#ee495c] uppercase">
             WOXSEN E-CELL
           </span>
         </div>
@@ -374,21 +374,21 @@ export default function TeamWallSection({
               <span
                 className={`team-hero-dot w-1.5 h-1.5 rounded-full ${
                   mentor.isChief
-                    ? "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]"
-                    : "bg-emerald-400/50"
+                    ? "bg-[#ee495c] shadow-[0_0_8px_rgba(238,73,92,0.8)]"
+                    : "bg-[#ee495c]/50"
                 } transition-all duration-300`}
               />
               <span
                 className={`team-hero-label font-mono text-[10px] sm:text-[11px] font-semibold tracking-[0.2em] uppercase ${
                   mentor.isChief
-                    ? "text-emerald-400 font-bold tracking-[0.22em]"
-                    : "text-emerald-400/70"
+                    ? "text-[#ee495c] font-bold tracking-[0.22em]"
+                    : "text-[#ee495c]/70"
                 } transition-colors duration-300`}
               >
                 {mentor.badge}
               </span>
               {mentor.isChief && (
-                <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold tracking-wider uppercase bg-emerald-400/15 text-emerald-300 border border-emerald-400/30">
+                <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold tracking-wider uppercase bg-[#ee495c]/15 text-white border border-[#ee495c]/35">
                   LEAD
                 </span>
               )}
@@ -399,13 +399,13 @@ export default function TeamWallSection({
               name={mentor.name}
               imageSrc={resolveImage(mentor.image)}
               className={`w-full h-[370px] sm:h-[420px] lg:h-[470px] ${
-                mentor.isChief ? "ring-1 ring-emerald-400/30 group-hover:ring-emerald-400/60" : ""
+                mentor.isChief ? "ring-1 ring-[#ee495c]/35 group-hover:ring-[#ee495c]/60" : ""
               }`}
             />
 
             {/* Editorial Caption */}
             <div className="mt-4 text-left">
-              <h3 className="team-hero-name font-display text-xl sm:text-2xl lg:text-[26px] uppercase tracking-tight leading-tight text-slate-300/80 group-hover:text-emerald-300 transition-colors drop-shadow-[0_3px_12px_rgba(0,0,0,0.98)] truncate">
+              <h3 className="team-hero-name font-display text-xl sm:text-2xl lg:text-[26px] uppercase tracking-tight leading-tight text-slate-300/80 group-hover:text-[#ff7686] transition-colors drop-shadow-[0_3px_12px_rgba(0,0,0,0.98)] truncate">
                 {mentor.name}
               </h3>
               <p className="team-hero-role font-mono text-[13px] sm:text-[14px] lg:text-[15px] font-normal tracking-wide mt-1.5 text-slate-400 drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)] transition-colors">
@@ -427,8 +427,8 @@ export default function TeamWallSection({
         {/* President: Dominant Hero Portrait */}
         <div className="relative shrink-0 flex flex-col justify-end w-[280px] sm:w-[340px] lg:w-[400px] group">
           <div className="flex items-center gap-2 h-5 mb-3">
-            <span className="team-hero-dot w-1.5 h-1.5 rounded-full bg-emerald-400/50 transition-all duration-300" />
-            <span className="team-hero-label font-mono text-[10px] sm:text-[11px] font-semibold tracking-[0.2em] uppercase text-emerald-400/70 transition-colors duration-300">
+            <span className="team-hero-dot w-1.5 h-1.5 rounded-full bg-[#ee495c]/50 transition-all duration-300" />
+            <span className="team-hero-label font-mono text-[10px] sm:text-[11px] font-semibold tracking-[0.2em] uppercase text-[#ee495c]/80 transition-colors duration-300">
               EXECUTIVE PRESIDENT
             </span>
           </div>
@@ -440,7 +440,7 @@ export default function TeamWallSection({
           />
 
           <div className="mt-4 text-left">
-            <h3 className="team-hero-name font-display text-2xl sm:text-3xl lg:text-[32px] uppercase tracking-tight leading-tight text-slate-300/80 group-hover:text-emerald-300 transition-colors drop-shadow-[0_3px_12px_rgba(0,0,0,0.98)]">
+            <h3 className="team-hero-name font-display text-2xl sm:text-3xl lg:text-[32px] uppercase tracking-tight leading-tight text-slate-300/80 group-hover:text-[#ff7686] transition-colors drop-shadow-[0_3px_12px_rgba(0,0,0,0.98)]">
               {president?.name || "Mohnish Singh Patwal"}
             </h3>
             <p className="team-hero-role font-mono text-[13px] sm:text-[14px] lg:text-[15px] font-normal tracking-wide mt-1.5 text-slate-400 drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)] transition-colors">
@@ -452,8 +452,8 @@ export default function TeamWallSection({
         {/* Vice President: Asymmetric Complementary Hero */}
         <div className="relative shrink-0 flex flex-col justify-end w-[260px] sm:w-[310px] lg:w-[360px] group mb-3 sm:mb-5">
           <div className="flex items-center gap-2 h-5 mb-3">
-            <span className="team-hero-dot w-1.5 h-1.5 rounded-full bg-emerald-400/50 transition-all duration-300" />
-            <span className="team-hero-label font-mono text-[10px] sm:text-[11px] font-semibold tracking-[0.2em] uppercase text-emerald-400/70 transition-colors duration-300">
+            <span className="team-hero-dot w-1.5 h-1.5 rounded-full bg-[#ee495c]/50 transition-all duration-300" />
+            <span className="team-hero-label font-mono text-[10px] sm:text-[11px] font-semibold tracking-[0.2em] uppercase text-[#ee495c]/80 transition-colors duration-300">
               EXECUTIVE VICE PRESIDENT
             </span>
           </div>
@@ -465,7 +465,7 @@ export default function TeamWallSection({
           />
 
           <div className="mt-4 text-left">
-            <h3 className="team-hero-name font-display text-xl sm:text-2xl lg:text-[26px] uppercase tracking-tight leading-tight text-slate-300/80 group-hover:text-emerald-300 transition-colors drop-shadow-[0_3px_12px_rgba(0,0,0,0.98)]">
+            <h3 className="team-hero-name font-display text-xl sm:text-2xl lg:text-[26px] uppercase tracking-tight leading-tight text-slate-300/80 group-hover:text-[#ff7686] transition-colors drop-shadow-[0_3px_12px_rgba(0,0,0,0.98)]">
               {vicePresident?.name || "Shreyas Kandi"}
             </h3>
             <p className="team-hero-role font-mono text-[13px] sm:text-[14px] lg:text-[15px] font-normal tracking-wide mt-1.5 text-slate-400 drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)] transition-colors">
@@ -488,8 +488,8 @@ export default function TeamWallSection({
           >
             {/* Department Index Header */}
             <div className="flex items-center gap-2 h-5 mb-2.5 sm:mb-3 shrink-0">
-              <span className="team-col-dot w-1.5 h-1.5 rounded-full bg-emerald-400/50 transition-all duration-300" />
-              <span className="team-col-label font-mono text-[10px] sm:text-[11px] font-semibold tracking-[0.2em] uppercase text-emerald-400/60 transition-colors duration-300 truncate">
+              <span className="team-col-dot w-1.5 h-1.5 rounded-full bg-[#ee495c]/50 transition-all duration-300" />
+              <span className="team-col-label font-mono text-[10px] sm:text-[11px] font-semibold tracking-[0.2em] uppercase text-[#ee495c]/80 transition-colors duration-300 truncate">
                 {grp.label}
               </span>
             </div>
@@ -507,7 +507,7 @@ export default function TeamWallSection({
 
                   {/* Museum Caption */}
                   <div className="mt-2 shrink-0">
-                    <h4 className="team-col-name font-display text-[16px] sm:text-[18px] lg:text-[19px] uppercase tracking-tight leading-snug text-slate-300/80 group-hover:text-emerald-300 transition-colors drop-shadow-[0_2px_8px_rgba(0,0,0,0.98)] truncate">
+                    <h4 className="team-col-name font-display text-[16px] sm:text-[18px] lg:text-[19px] uppercase tracking-tight leading-snug text-slate-300/80 group-hover:text-[#ff7686] transition-colors drop-shadow-[0_2px_8px_rgba(0,0,0,0.98)] truncate">
                       {member.name}
                     </h4>
                     <p className="team-col-role font-mono text-[10.5px] sm:text-[11.5px] lg:text-[12px] tracking-tight mt-0.5 text-slate-400 drop-shadow-[0_2px_6px_rgba(0,0,0,0.95)] truncate transition-colors">

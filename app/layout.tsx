@@ -72,7 +72,7 @@ export default function RootLayout({
       lang="en"
       className={`${bebasNeue.variable} ${dmSans.variable} ${spaceMono.variable} dark antialiased`}
     >
-      <body className="bg-[#040608] text-slate-100 font-sans selection:bg-emerald-500/30 selection:text-emerald-200 min-h-screen">
+      <body className="bg-[#040608] text-slate-100 font-sans selection:bg-[#ee495c]/30 selection:text-white min-h-screen">
         {/* Warm the asset CDN connection + first scrollytelling frame before
             JS hydrates, so the boot corridor starts with a head start. The
             media gate avoids wasting the preload on <1024px (720p) devices. */}

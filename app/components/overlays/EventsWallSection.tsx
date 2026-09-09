@@ -87,8 +87,8 @@ export default function EventsWallSection({}: EventsWallSectionProps) {
             <div className="relative z-10 text-left mb-4 sm:mb-5 max-w-[540px]">
               {/* Level 1: Refined Editorial Index Label */}
               <div className="flex items-center gap-2.5 h-5 mb-2.5 sm:mb-3">
-                <span className="event-card-dot w-1.5 h-1.5 rounded-full bg-emerald-400/50 transition-all duration-300" />
-                <span className="event-card-label font-mono text-[10px] sm:text-[11px] font-semibold tracking-[0.22em] uppercase text-emerald-400/70 transition-colors duration-300">
+                <span className="event-card-dot w-1.5 h-1.5 rounded-full bg-[#ee495c]/60 transition-all duration-300" />
+                <span className="event-card-label font-mono text-[10px] sm:text-[11px] font-semibold tracking-[0.22em] uppercase text-[#ee495c] transition-colors duration-300">
                   {event.label}
                 </span>
                 <span className="h-px w-6 bg-white/20" />

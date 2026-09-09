@@ -98,7 +98,7 @@ export default function PreloadManager({ progress, isReady, onEnter }: PreloadMa
       aria-label="Loading Experience"
     >
       {/* Subtle ambient lighting */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-72 sm:w-96 h-72 sm:h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-72 sm:w-96 h-72 sm:h-96 bg-[#ee495c]/15 rounded-full blur-3xl pointer-events-none" />
 
       <div className="relative flex flex-col items-center max-w-sm w-full text-center">
         {/* Minimalist Logo Insignia */}
@@ -114,31 +114,31 @@ export default function PreloadManager({ progress, isReady, onEnter }: PreloadMa
         </div>
 
         {/* Brand Tagline */}
-        <div className="flex items-center gap-2 text-emerald-400 text-[11px] font-mono tracking-[0.25em] uppercase mb-1">
-          <Terminal className="w-3.5 h-3.5 text-emerald-400" />
+        <div className="flex items-center gap-2 text-[#ee495c] text-[11px] font-mono tracking-[0.25em] uppercase mb-1">
+          <Terminal className="w-3.5 h-3.5 text-[#ee495c]" />
           <span>E-CELL // WOXSEN</span>
         </div>
 
         {/* Minimal Telemetry State */}
         <div className="font-mono text-[10px] tracking-[0.15em] text-slate-400 mb-7 flex items-center gap-2">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+          <span className="w-1.5 h-1.5 rounded-full bg-[#ee495c] animate-ping" />
           <span>{statusText}</span>
         </div>
 
         {/* Precision Progress Track */}
         <div className="w-64 sm:w-72 h-[3px] bg-white/10 rounded-full overflow-hidden mb-3 relative">
           <div
-            className="h-full bg-gradient-to-r from-emerald-500 via-emerald-400 to-teal-300 transition-all duration-150 rounded-full relative"
+            className="h-full bg-gradient-to-r from-[#cc2b3e] via-[#ee495c] to-[#ff7686] transition-all duration-150 rounded-full relative"
             style={{ width: `${Math.max(displayProgress, 8)}%` }}
           >
-            <div className="absolute right-0 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-white shadow-[0_0_8px_#34d399]" />
+            <div className="absolute right-0 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-white shadow-[0_0_8px_#ee495c]" />
           </div>
         </div>
 
         {/* Technical Progress & Telemetry */}
         <div className="flex justify-between w-64 sm:w-72 text-[11px] font-mono text-slate-500 mb-8">
           <span className="tracking-wider">SCROLLY ENGINE</span>
-          <span className="text-emerald-400 font-semibold tracking-widest font-mono">
+          <span className="text-[#ee495c] font-semibold tracking-widest font-mono">
             {String(displayProgress).padStart(3, "0")}%
           </span>
         </div>
@@ -148,10 +148,10 @@ export default function PreloadManager({ progress, isReady, onEnter }: PreloadMa
           {(canSkip || isReady) && (
             <button
               onClick={handleTriggerEnter}
-              className="group inline-flex items-center gap-2 px-5 py-2 rounded-full border border-emerald-500/30 bg-emerald-950/20 hover:bg-emerald-500/10 hover:border-emerald-400/60 text-emerald-300 text-xs font-mono font-medium tracking-widest uppercase transition-all duration-200 cursor-pointer shadow-lg shadow-emerald-950/30 active:scale-95 animate-fade-in"
+              className="group inline-flex items-center gap-2 px-5 py-2 rounded-full border border-[#ee495c]/40 bg-[#ee495c]/10 hover:bg-[#ee495c]/25 hover:border-[#ee495c]/70 text-white text-xs font-mono font-medium tracking-widest uppercase transition-all duration-200 cursor-pointer shadow-lg shadow-[#ee495c]/20 hover:shadow-[0_0_20px_rgba(238,73,92,0.35)] active:scale-95 animate-fade-in"
             >
               <span>{isReady ? "ENTER" : "SKIP INTRO"}</span>
-              <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5 text-emerald-400" />
+              <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5 text-[#ee495c] group-hover:text-white" />
             </button>
           )}
         </div>

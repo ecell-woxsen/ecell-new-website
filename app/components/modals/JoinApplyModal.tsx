@@ -37,15 +37,15 @@ export default function JoinApplyModal({ isOpen, onClose }: JoinApplyModalProps)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-xl animate-in fade-in duration-200">
-      <div className="relative w-full max-w-xl bg-gradient-to-b from-slate-900/95 to-slate-950/95 border border-white/15 rounded-3xl p-6 sm:p-8 shadow-2xl shadow-emerald-950/40 text-slate-100 overflow-hidden">
+      <div className="relative w-full max-w-xl bg-gradient-to-b from-slate-900/95 to-slate-950/95 border border-white/15 rounded-3xl p-6 sm:p-8 shadow-2xl shadow-[#ee495c]/20 text-slate-100 overflow-hidden">
         {/* Glow ambient background */}
-        <div className="absolute top-0 right-0 -mr-20 -mt-20 w-60 h-60 bg-emerald-500/15 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-60 h-60 bg-teal-500/15 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute top-0 right-0 -mr-20 -mt-20 w-60 h-60 bg-[#ee495c]/15 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-60 h-60 bg-[#ee495c]/10 rounded-full blur-3xl pointer-events-none" />
 
         {/* Close Button */}
         <button
           onClick={resetAndClose}
-          className="absolute top-5 right-5 p-2 rounded-full bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white border border-white/10 transition-colors cursor-pointer"
+          className="absolute top-5 right-5 p-2 rounded-full bg-white/5 hover:bg-[#ee495c]/15 text-slate-400 hover:text-white border border-white/10 hover:border-[#ee495c]/30 transition-colors cursor-pointer"
           aria-label="Close"
         >
           <X className="w-5 h-5" />
@@ -53,7 +53,7 @@ export default function JoinApplyModal({ isOpen, onClose }: JoinApplyModalProps)
 
         {submitted ? (
           <div className="py-12 flex flex-col items-center text-center gap-4">
-            <div className="w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
+            <div className="w-16 h-16 rounded-full bg-[#ee495c]/20 border border-[#ee495c]/40 flex items-center justify-center text-[#ee495c]">
               <CheckCircle2 className="w-8 h-8" />
             </div>
             <h3 className="text-2xl font-bold font-heading text-white">
@@ -64,14 +64,14 @@ export default function JoinApplyModal({ isOpen, onClose }: JoinApplyModalProps)
             </p>
             <button
               onClick={resetAndClose}
-              className="mt-4 px-6 py-2.5 rounded-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold text-sm transition-all"
+              className="mt-4 px-6 py-2.5 rounded-full bg-[#ee495c] hover:bg-[#ff5a6e] text-white font-semibold text-sm transition-all shadow-lg shadow-[#ee495c]/30 cursor-pointer"
             >
               Done
             </button>
           </div>
         ) : (
           <div>
-            <div className="flex items-center gap-2 text-emerald-400 text-xs font-mono font-medium mb-1">
+            <div className="flex items-center gap-2 text-[#ee495c] text-xs font-mono font-medium mb-1">
               <Sparkles className="w-4 h-4" />
               <span>OFFICIAL APPLICATION PORTAL</span>
             </div>
@@ -87,10 +87,10 @@ export default function JoinApplyModal({ isOpen, onClose }: JoinApplyModalProps)
               <button
                 type="button"
                 onClick={() => setFormType("student")}
-                className={`py-2 rounded-lg font-medium transition-all ${
+                className={`py-2 rounded-lg font-medium transition-all cursor-pointer ${
                   formType === "student"
-                    ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                    : "text-slate-400 hover:text-white"
+                    ? "bg-[#ee495c]/20 text-white border border-[#ee495c]/40 shadow-sm"
+                    : "text-slate-400 hover:text-white hover:bg-[#ee495c]/10"
                 }`}
               >
                 Join Team
@@ -98,10 +98,10 @@ export default function JoinApplyModal({ isOpen, onClose }: JoinApplyModalProps)
               <button
                 type="button"
                 onClick={() => setFormType("startup")}
-                className={`py-2 rounded-lg font-medium transition-all ${
+                className={`py-2 rounded-lg font-medium transition-all cursor-pointer ${
                   formType === "startup"
-                    ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                    : "text-slate-400 hover:text-white"
+                    ? "bg-[#ee495c]/20 text-white border border-[#ee495c]/40 shadow-sm"
+                    : "text-slate-400 hover:text-white hover:bg-[#ee495c]/10"
                 }`}
               >
                 Pitch Idea
@@ -109,10 +109,10 @@ export default function JoinApplyModal({ isOpen, onClose }: JoinApplyModalProps)
               <button
                 type="button"
                 onClick={() => setFormType("partner")}
-                className={`py-2 rounded-lg font-medium transition-all ${
+                className={`py-2 rounded-lg font-medium transition-all cursor-pointer ${
                   formType === "partner"
-                    ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                    : "text-slate-400 hover:text-white"
+                    ? "bg-[#ee495c]/20 text-white border border-[#ee495c]/40 shadow-sm"
+                    : "text-slate-400 hover:text-white hover:bg-[#ee495c]/10"
                 }`}
               >
                 Partner / Sponsor
@@ -131,7 +131,7 @@ export default function JoinApplyModal({ isOpen, onClose }: JoinApplyModalProps)
                       placeholder="e.g. Aarav Sharma"
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      className="w-full bg-slate-950/60 border border-white/10 rounded-xl py-2.5 pl-9 pr-3 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 transition-colors"
+                      className="w-full bg-slate-950/60 border border-white/10 rounded-xl py-2.5 pl-9 pr-3 text-white placeholder-slate-500 focus:outline-none focus:border-[#ee495c]/60 focus:ring-1 focus:ring-[#ee495c]/30 transition-colors"
                     />
                   </div>
                 </div>
@@ -146,7 +146,7 @@ export default function JoinApplyModal({ isOpen, onClose }: JoinApplyModalProps)
                       placeholder="e.g. name@woxsen.edu.in"
                       value={formData.email}
                       onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      className="w-full bg-slate-950/60 border border-white/10 rounded-xl py-2.5 pl-9 pr-3 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 transition-colors"
+                      className="w-full bg-slate-950/60 border border-white/10 rounded-xl py-2.5 pl-9 pr-3 text-white placeholder-slate-500 focus:outline-none focus:border-[#ee495c]/60 focus:ring-1 focus:ring-[#ee495c]/30 transition-colors"
                     />
                   </div>
                 </div>
@@ -163,7 +163,7 @@ export default function JoinApplyModal({ isOpen, onClose }: JoinApplyModalProps)
                       placeholder="+91 98765 43210"
                       value={formData.phone}
                       onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                      className="w-full bg-slate-950/60 border border-white/10 rounded-xl py-2.5 pl-9 pr-3 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 transition-colors"
+                      className="w-full bg-slate-950/60 border border-white/10 rounded-xl py-2.5 pl-9 pr-3 text-white placeholder-slate-500 focus:outline-none focus:border-[#ee495c]/60 focus:ring-1 focus:ring-[#ee495c]/30 transition-colors"
                     />
                   </div>
                 </div>
@@ -175,7 +175,7 @@ export default function JoinApplyModal({ isOpen, onClose }: JoinApplyModalProps)
                     <select
                       value={formData.department}
                       onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                      className="w-full bg-slate-950/60 border border-white/10 rounded-xl py-2.5 pl-9 pr-3 text-white focus:outline-none focus:border-emerald-500/50 transition-colors"
+                      className="w-full bg-slate-950/60 border border-white/10 rounded-xl py-2.5 pl-9 pr-3 text-white focus:outline-none focus:border-[#ee495c]/60 focus:ring-1 focus:ring-[#ee495c]/30 transition-colors"
                     >
                       <option value="School of Technology" className="bg-slate-900 text-white">School of Technology</option>
                       <option value="School of Business" className="bg-slate-900 text-white">School of Business</option>
@@ -210,14 +210,14 @@ export default function JoinApplyModal({ isOpen, onClose }: JoinApplyModalProps)
                     }
                     value={formData.interestOrIdea}
                     onChange={(e) => setFormData({ ...formData, interestOrIdea: e.target.value })}
-                    className="w-full bg-slate-950/60 border border-white/10 rounded-xl py-2.5 pl-9 pr-3 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 transition-colors"
+                    className="w-full bg-slate-950/60 border border-white/10 rounded-xl py-2.5 pl-9 pr-3 text-white placeholder-slate-500 focus:outline-none focus:border-[#ee495c]/60 focus:ring-1 focus:ring-[#ee495c]/30 transition-colors"
                   />
                 </div>
               </div>
 
               <button
                 type="submit"
-                className="w-full mt-2 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition-all cursor-pointer hover:scale-[1.01] active:scale-[0.99]"
+                className="w-full mt-2 py-3 rounded-xl bg-[#ee495c] hover:bg-[#ff5a6e] text-white font-bold flex items-center justify-center gap-2 shadow-lg shadow-[#ee495c]/30 transition-all cursor-pointer hover:scale-[1.01] active:scale-[0.99]"
               >
                 <Send className="w-4 h-4" />
                 <span>Submit Application</span>

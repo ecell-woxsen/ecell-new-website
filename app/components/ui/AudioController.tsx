@@ -100,19 +100,19 @@ export default function AudioController() {
       onClick={toggleAudio}
       className={`fixed bottom-6 left-6 z-40 flex items-center gap-2.5 px-3.5 py-2 rounded-full border backdrop-blur-xl transition-all duration-300 shadow-xl ${
         isPlaying
-          ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-300 shadow-emerald-500/10"
-          : "bg-slate-950/70 border-white/10 text-slate-400 hover:text-white hover:border-white/20"
+          ? "bg-[#ee495c]/20 border-[#ee495c]/40 text-white shadow-[#ee495c]/20"
+          : "bg-slate-950/70 border-white/10 text-slate-400 hover:text-white hover:border-[#ee495c]/40 hover:bg-[#ee495c]/10"
       }`}
       title={isPlaying ? "Mute Ambient Soundscape" : "Play Ambient Soundscape"}
     >
       {isPlaying ? (
         <>
-          <Volume2 className="w-4 h-4 text-emerald-400 animate-pulse" />
+          <Volume2 className="w-4 h-4 text-[#ee495c] animate-pulse" />
           <span className="text-xs font-mono font-medium tracking-tight">SOUND ON</span>
           <span className="flex items-end gap-0.5 h-3">
-            <span className="w-0.5 h-3 bg-emerald-400 animate-pulse" />
-            <span className="w-0.5 h-2 bg-emerald-400 animate-pulse [animation-delay:150ms]" />
-            <span className="w-0.5 h-2.5 bg-emerald-400 animate-pulse [animation-delay:300ms]" />
+            <span className="w-0.5 h-3 bg-[#ee495c] animate-pulse" />
+            <span className="w-0.5 h-2 bg-[#ee495c] animate-pulse [animation-delay:150ms]" />
+            <span className="w-0.5 h-2.5 bg-[#ee495c] animate-pulse [animation-delay:300ms]" />
           </span>
         </>
       ) : (

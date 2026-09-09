@@ -9,48 +9,48 @@ export default function TeamWallCards() {
       name: "Core Committee Lead",
       role: "President & Head of Innovation",
       department: "School of Business",
-      accent: "from-emerald-500 to-teal-500",
-      avatarColor: "bg-emerald-950/80 border-emerald-500/40 text-emerald-400",
+      accent: "from-[#ee495c]/30 to-[#cc2b3e]/20",
+      avatarColor: "bg-[#ee495c]/15 border-[#ee495c]/35 text-white",
       initials: "CL",
     },
     {
       name: "Vice President",
       role: "Operations & Strategy Lead",
       department: "School of Technology",
-      accent: "from-teal-500 to-cyan-500",
-      avatarColor: "bg-teal-950/80 border-teal-500/40 text-teal-400",
+      accent: "from-[#ee495c]/30 to-[#cc2b3e]/20",
+      avatarColor: "bg-[#ee495c]/15 border-[#ee495c]/35 text-white",
       initials: "VP",
     },
     {
       name: "Technical Lead",
       role: "Head of Tech & AI Development",
       department: "School of Technology",
-      accent: "from-sky-500 to-blue-500",
-      avatarColor: "bg-sky-950/80 border-sky-500/40 text-sky-400",
+      accent: "from-[#ee495c]/30 to-[#cc2b3e]/20",
+      avatarColor: "bg-[#ee495c]/15 border-[#ee495c]/35 text-white",
       initials: "TL",
     },
     {
       name: "Design & Brand Lead",
       role: "Head of Creatives & Media",
       department: "School of Arts & Design",
-      accent: "from-fuchsia-500 to-pink-500",
-      avatarColor: "bg-fuchsia-950/80 border-fuchsia-500/40 text-fuchsia-400",
+      accent: "from-[#ee495c]/30 to-[#cc2b3e]/20",
+      avatarColor: "bg-[#ee495c]/15 border-[#ee495c]/35 text-white",
       initials: "DL",
     },
     {
       name: "Corporate Relations Lead",
       role: "Industry & Sponsorships",
       department: "School of Business",
-      accent: "from-amber-500 to-orange-500",
-      avatarColor: "bg-amber-950/80 border-amber-500/40 text-amber-400",
+      accent: "from-[#ee495c]/30 to-[#cc2b3e]/20",
+      avatarColor: "bg-[#ee495c]/15 border-[#ee495c]/35 text-white",
       initials: "CR",
     },
     {
       name: "Legal & Policy Lead",
       role: "Incubation & Compliance",
       department: "School of Law",
-      accent: "from-indigo-500 to-violet-500",
-      avatarColor: "bg-indigo-950/80 border-indigo-500/40 text-indigo-400",
+      accent: "from-[#ee495c]/30 to-[#cc2b3e]/20",
+      avatarColor: "bg-[#ee495c]/15 border-[#ee495c]/35 text-white",
       initials: "LL",
     },
   ];
@@ -60,7 +60,7 @@ export default function TeamWallCards() {
       {/* Header */}
       <div className="flex items-center justify-between pb-4 mb-6 border-b border-white/10">
         <div>
-          <div className="flex items-center gap-2 text-teal-400 text-xs font-mono font-semibold tracking-wider mb-1">
+          <div className="flex items-center gap-2 text-[#ee495c] text-xs font-mono font-semibold tracking-wider mb-1">
             <Users className="w-3.5 h-3.5" />
             <span>LEADERSHIP & COMMITTEE</span>
           </div>
@@ -69,7 +69,7 @@ export default function TeamWallCards() {
           </h2>
         </div>
         <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-[11px] font-mono text-slate-300">
-          <Sparkles className="w-3 h-3 text-emerald-400" />
+          <Sparkles className="w-3 h-3 text-[#ee495c]" />
           <span>50+ STUDENT CONTRIBUTORS</span>
         </div>
       </div>
@@ -79,10 +79,10 @@ export default function TeamWallCards() {
         {teamMembers.map((member) => (
           <div
             key={member.role}
-            className="group relative p-4 rounded-2xl bg-slate-950/60 border border-white/10 hover:border-emerald-500/40 transition-all duration-300 flex flex-col items-center text-center overflow-hidden hover:scale-[1.02]"
+            className="group relative p-4 rounded-2xl bg-slate-950/60 border border-white/10 hover:border-[#ee495c]/50 hover:bg-[#ee495c]/5 transition-all duration-300 flex flex-col items-center text-center overflow-hidden hover:scale-[1.02]"
           >
             {/* Ambient Card Glow on hover */}
-            <div className="absolute -top-10 -right-10 w-24 h-24 bg-emerald-500/10 rounded-full blur-xl group-hover:bg-emerald-500/20 transition-all" />
+            <div className="absolute -top-10 -right-10 w-24 h-24 bg-[#ee495c]/10 rounded-full blur-xl group-hover:bg-[#ee495c]/20 transition-all" />
 
             {/* Avatar Container with stylish SVG filler */}
             <div className="relative mb-3">
@@ -104,10 +104,10 @@ export default function TeamWallCards() {
             </div>
 
             {/* Member Details */}
-            <h3 className="font-heading font-bold text-sm sm:text-base text-white group-hover:text-emerald-300 transition-colors">
+            <h3 className="font-heading font-bold text-sm sm:text-base text-white group-hover:text-[#ff7686] transition-colors">
               {member.name}
             </h3>
-            <p className="text-[11px] sm:text-xs font-semibold text-emerald-400 mt-0.5 mb-2 line-clamp-1">
+            <p className="text-[11px] sm:text-xs font-semibold text-[#ee495c] mt-0.5 mb-2 line-clamp-1">
               {member.role}
             </p>
 
