@@ -1691,12 +1691,16 @@ function ScrollytellingEngine({
 
     const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const isTouch = typeof window !== "undefined" && ("ontouchstart" in window || navigator.maxTouchPoints > 0);
+    const isMobile = typeof window !== "undefined" && (
+      window.innerWidth < 768 ||
+      /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+    );
 
     // Speed Limiter Configuration
-    // Calibrated for buttery-smooth trackpad and mouse wheel feel with natural deceleration
-    const maxDeltaPerEvent = isTouch ? 120 : 220;
-    const maxScrollLead = isTouch ? 600 : 1000;
-    const maxInputSpeed = isTouch ? 3200 : 6000; // px/sec
+    // Calibrated for snappy, responsive mobile touch flick gestures and buttery-smooth trackpad/wheel feel
+    const maxDeltaPerEvent = isMobile ? 320 : (isTouch ? 260 : 220);
+    const maxScrollLead = isMobile ? 2400 : (isTouch ? 2000 : 1200);
+    const maxInputSpeed = isMobile ? 9500 : (isTouch ? 8000 : 6500); // px/sec
 
     let lastInputTime = performance.now();
 
@@ -1751,16 +1755,16 @@ function ScrollytellingEngine({
     };
 
     const lenis = new Lenis({
-      duration: prefersReducedMotion ? 0 : isTouch ? 0.7 : 0.85,
+      duration: prefersReducedMotion ? 0 : isMobile ? 0.6 : (isTouch ? 0.7 : 0.85),
       easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
       orientation: "vertical",
       gestureOrientation: "vertical",
       smoothWheel: true,
       wheelMultiplier: 1.0,
-      touchMultiplier: isTouch ? 1.0 : 1.1,
+      touchMultiplier: isMobile ? 2.5 : (isTouch ? 1.8 : 1.0),
       syncTouch: isTouch,
-      syncTouchLerp: 0.08,
-      touchInertiaExponent: 1.1,
+      syncTouchLerp: 0.075,
+      touchInertiaExponent: isMobile ? 1.65 : (isTouch ? 1.55 : 1.2),
       infinite: false,
       virtualScroll: handleVirtualScroll,
     });
@@ -1878,8 +1882,7 @@ function ScrollytellingEngine({
             onCompleteCb();
           }
         } else {
-          const isTouchDevice = typeof window !== "undefined" && ("ontouchstart" in window || navigator.maxTouchPoints > 0);
-          const maxSpeed = isTouchDevice ? 1600 : 2600; // px/sec, conforms to playhead frame governor
+          const maxSpeed = 2600; // px/sec, uniform smooth simulated navigation speed across all devices
           const distTraveled = Math.abs(currentScroll - sim.startY);
 
           // Smooth ramp-up from start (over first 350px)
@@ -1910,7 +1913,7 @@ function ScrollytellingEngine({
         renderFloat = targetFloat;
       } else {
         const deltaFloat = targetFloat - prevFloat;
-        const maxFrameSpeed = isTouch ? 180 : 320; // max frames per second
+        const maxFrameSpeed = isMobile ? 280 : (isTouch ? 280 : 320); // max frames per second
         const maxDeltaFloat = maxFrameSpeed * dt;
         if (Math.abs(deltaFloat) > maxDeltaFloat) {
           renderFloat = prevFloat + Math.sign(deltaFloat) * maxDeltaFloat;
