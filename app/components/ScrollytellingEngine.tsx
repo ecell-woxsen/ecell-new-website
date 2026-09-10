@@ -1697,10 +1697,10 @@ function ScrollytellingEngine({
     );
 
     // Speed Limiter Configuration
-    // Calibrated for snappy, responsive mobile touch flick gestures and buttery-smooth trackpad/wheel feel
-    const maxDeltaPerEvent = isMobile ? 320 : (isTouch ? 260 : 220);
-    const maxScrollLead = isMobile ? 2400 : (isTouch ? 2000 : 1200);
-    const maxInputSpeed = isMobile ? 9500 : (isTouch ? 8000 : 6500); // px/sec
+    // Calibrated for a controlled, balanced mobile scroll with smooth inertia and buttery-smooth trackpad/wheel feel
+    const maxDeltaPerEvent = isMobile ? 200 : (isTouch ? 180 : 220);
+    const maxScrollLead = isMobile ? 1400 : (isTouch ? 1200 : 1000);
+    const maxInputSpeed = isMobile ? 5500 : (isTouch ? 5000 : 6000); // px/sec
 
     let lastInputTime = performance.now();
 
@@ -1755,16 +1755,16 @@ function ScrollytellingEngine({
     };
 
     const lenis = new Lenis({
-      duration: prefersReducedMotion ? 0 : isMobile ? 0.6 : (isTouch ? 0.7 : 0.85),
+      duration: prefersReducedMotion ? 0 : isMobile ? 0.75 : (isTouch ? 0.75 : 0.85),
       easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
       orientation: "vertical",
       gestureOrientation: "vertical",
       smoothWheel: true,
       wheelMultiplier: 1.0,
-      touchMultiplier: isMobile ? 2.5 : (isTouch ? 1.8 : 1.0),
+      touchMultiplier: isMobile ? 1.6 : (isTouch ? 1.3 : 1.0),
       syncTouch: isTouch,
-      syncTouchLerp: 0.075,
-      touchInertiaExponent: isMobile ? 1.65 : (isTouch ? 1.55 : 1.2),
+      syncTouchLerp: 0.08,
+      touchInertiaExponent: isMobile ? 1.35 : (isTouch ? 1.25 : 1.1),
       infinite: false,
       virtualScroll: handleVirtualScroll,
     });
@@ -1913,7 +1913,7 @@ function ScrollytellingEngine({
         renderFloat = targetFloat;
       } else {
         const deltaFloat = targetFloat - prevFloat;
-        const maxFrameSpeed = isMobile ? 280 : (isTouch ? 280 : 320); // max frames per second
+        const maxFrameSpeed = isMobile ? 240 : (isTouch ? 240 : 320); // max frames per second
         const maxDeltaFloat = maxFrameSpeed * dt;
         if (Math.abs(deltaFloat) > maxDeltaFloat) {
           renderFloat = prevFloat + Math.sign(deltaFloat) * maxDeltaFloat;
