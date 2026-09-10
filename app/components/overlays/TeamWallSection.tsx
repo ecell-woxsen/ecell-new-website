@@ -72,7 +72,7 @@ const TEAM_DATA: TeamGroup[] = [
     targetFrame: 960,
     members: [
       {
-        name: "HC",
+        name: "Harshith Chakravarthy",
         role: "Advisor",
         department: "Advisory Board",
         image: "/team/hc.webp",
@@ -112,13 +112,13 @@ const TEAM_DATA: TeamGroup[] = [
     targetFrame: 1040,
     members: [
       {
-        name: "Imad",
+        name: "Shaik Imaduddin",
         role: "Head of Technology",
         department: "Engineering & Digital",
         image: "/team/imad.webp",
       },
       {
-        name: "Aali",
+        name: "Aali Rahman",
         role: "Lead of Technology",
         department: "Engineering & Digital",
         image: "/team/aali.webp",
