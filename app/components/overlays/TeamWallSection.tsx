@@ -78,7 +78,7 @@ const TEAM_DATA: TeamGroup[] = [
         image: "/team/hc.webp",
       },
       {
-        name: "Nihal",
+        name: "Nihal S Talampally",
         role: "Advisor",
         department: "Advisory Board",
         image: "/team/Nihal.webp",
@@ -92,7 +92,7 @@ const TEAM_DATA: TeamGroup[] = [
     targetFrame: 1000,
     members: [
       {
-        name: "Shrinidhi",
+        name: "Shrinidhi Padgul",
         role: "Secretary & Head of Documentation",
         department: "Governance & Secretariat",
         image: "/team/Shrinidhi.webp",
@@ -138,7 +138,7 @@ const TEAM_DATA: TeamGroup[] = [
         image: "/team/mahek.webp",
       },
       {
-        name: "Shloka",
+        name: "Shloka Reddy",
         role: "Team Lead Marketing & Creatives",
         department: "Brand & Communications",
         image: "/team/Shloka.webp",
@@ -158,7 +158,7 @@ const TEAM_DATA: TeamGroup[] = [
         image: "/team/mihir.webp",
       },
       {
-        name: "Pooja",
+        name: "Pooja mani",
         role: "Lead of Events & Operations",
         department: "Experience & Logistics",
         image: "/team/Pooja.webp",
@@ -172,13 +172,13 @@ const TEAM_DATA: TeamGroup[] = [
     targetFrame: 1160,
     members: [
       {
-        name: "Pranav",
+        name: "K.V. Pranav",
         role: "Head of Finance & Sponsorship",
         department: "Treasury & Capital",
         image: "/team/pranav.webp",
       },
       {
-        name: "Minal",
+        name: "Minal Chintakutta",
         role: "Team Lead Finance & Operations",
         department: "Treasury & Capital",
         image: "/team/minal.webp",
@@ -192,7 +192,7 @@ const TEAM_DATA: TeamGroup[] = [
     targetFrame: 1200,
     members: [
       {
-        name: "Reetika",
+        name: "Reetika Malempatty",
         role: "Head of Outreach & Partnerships",
         department: "Ecosystem & Relations",
         image: "/team/reetika.webp",
