@@ -95,12 +95,12 @@ export default function EventsWallSection({}: EventsWallSectionProps) {
               </div>
 
               {/* Level 2: Scaled Editorial Title */}
-              <h3 className="event-card-title font-display text-4xl sm:text-5xl lg:text-6xl xl:text-[66px] tracking-[-0.01em] uppercase leading-[0.92] mb-3 sm:mb-4 text-slate-200/80 drop-shadow-[0_4px_20px_rgba(0,0,0,0.98)] transition-colors duration-300">
+              <h3 className="event-card-title font-display text-4xl sm:text-5xl lg:text-6xl xl:text-[66px] tracking-[-0.01em] uppercase leading-[0.92] mb-3 sm:mb-4 text-slate-200/80 [text-shadow:0_4px_20px_rgba(0,0,0,0.98)] transition-colors duration-300">
                 {event.title}
               </h3>
 
               {/* Level 3: Restrained Editorial Reading Description */}
-              <p className="text-[14px] sm:text-[15px] text-slate-100/90 font-normal leading-[1.65] drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)] max-w-[480px] lg:max-w-[540px]">
+              <p className="text-[14px] sm:text-[15px] text-slate-100/90 font-normal leading-[1.65] [text-shadow:0_2px_8px_rgba(0,0,0,0.95)] max-w-[480px] lg:max-w-[540px]">
                 {event.description}
               </p>
             </div>

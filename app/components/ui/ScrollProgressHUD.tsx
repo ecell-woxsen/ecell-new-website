@@ -38,9 +38,9 @@ function ScrollProgressHUD({
   }
 
   return (
-    <div className="fixed bottom-6 right-6 z-40 flex items-center gap-3 px-4 py-2 rounded-full bg-slate-950/75 border border-white/10 backdrop-blur-xl shadow-2xl pointer-events-none transition-opacity duration-300">
+    <div className="fixed bottom-6 right-6 z-40 flex items-center gap-3 px-4 py-2 rounded-full bg-slate-950/90 border border-white/15 shadow-2xl pointer-events-none transition-opacity duration-300">
       <div className="flex items-center gap-2">
-        <Compass className="w-3.5 h-3.5 text-[#ee495c] animate-spin-slow" />
+        <Compass className="w-3.5 h-3.5 text-[#ee495c]" />
         <span className="text-[10px] font-mono text-[#ee495c] font-semibold tracking-wider">
           CH {chapterIndex}
         </span>

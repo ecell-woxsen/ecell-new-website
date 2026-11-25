@@ -50,7 +50,7 @@ The production deployment features a **Dual-Delivery Asset Pipeline** backed by 
 
 ## ✨ Key Features
 
-- 🎞️ **Sub-Frame Canvas Scrollytelling**: High-performance HTML5 2D canvas playback spanning **1,262 virtual timeline frames** with continuous Hermite / Smoothstep temporal blending for zero-stutter transitions on high-refresh displays (60Hz / 120Hz+).
+- 🎞️ **GPU-Accelerated Sub-Frame Scrollytelling**: Single-pass WebGPU (`shaders.com`) and WebGL2 fragment shader renderer (with 2D canvas fallback) spanning **1,262 virtual timeline frames** with Hermite / Smoothstep temporal blending, hardware `object-fit: cover` UV mapping, and an integrated shader vignette at 60Hz / 120Hz+.
 - 📦 **Binary Pack Streaming Architecture (Track B)**: 16-frame chunked binary archives (`.bin`) with compact 4-byte offset headers, reducing over 840 individual network round-trips into ~53 sequential, streamable chunks with zero connection overhead.
 - ☁️ **High-Performance Edge CDN & Cloudflare Worker**: Custom reverse proxy worker serving R2 assets with full HTTP/2+ multiplexing, Cache API edge caching, and strict RFC 7233 byte-range parsing for video streaming (`still_shot.mp4`).
 - 🧠 **Velocity & Direction-Aware Memory Management**:
@@ -197,6 +197,7 @@ The platform integrates **Convex** as its real-time reactive backend for interac
 | **Framework** | [Next.js 16.3.1](https://nextjs.org/) (App Router, Turbopack) | Server & client component orchestration, asset optimization |
 | **UI Library** | [React 19.2.8](https://react.dev/) | Concurrent UI rendering, ref-based canvas integration |
 | **Backend & DB** | [Convex 1.45.0](https://convex.dev/) | Real-time reactive data layer, inquiry submission & anti-spam |
+| **GPU Shaders** | [Shaders](https://shaders.com/) (`shaders` 4.0.7) + WebGL2 | WebGPU (`shaders/std`, `shaders/js`, `shaders/react`) & WebGL2 single-pass frame blending |
 | **Edge CDN** | [Cloudflare Workers](https://workers.cloudflare.com/) + [R2](https://www.cloudflare.com/products/r2/) | High-speed asset delivery, HTTP/2+ multiplexing, range streaming |
 | **Language** | [TypeScript 5](https://www.typescriptlang.org/) | Strict type safety across components, workers, and build scripts |
 | **Styling** | [Tailwind CSS v4](https://tailwindcss.com/) + PostCSS | Modern CSS utility tokens, custom animations, glassmorphism |
@@ -236,7 +237,10 @@ ecell_new_website/
 │   ├── lib/
 │   │   ├── assets.ts                  # R2 asset loader, URL resolver & frame loop mappings
 │   │   ├── eventsPack.ts              # Binary demuxer for packed event exhibition imagery
-│   │   └── teamPack.ts                # Binary demuxer for packed team portraits
+│   │   ├── frameCache.ts              # CacheStorage persistence & chunked binary pack unpacker
+│   │   ├── gpuFrameRenderer.ts        # Single-pass WebGL2 shader renderer & recycled texture pool
+│   │   ├── teamPack.ts                # Binary demuxer for packed team portraits
+│   │   └── webgpuScrollyShader.ts     # Shaders.com WebGPU ScrollyBlend shader & VRAM pool
 │   ├── ConvexClientProvider.tsx       # React provider for Convex real-time client
 │   ├── error.tsx                      # Next.js route error boundary
 │   ├── global-error.tsx               # Root application error boundary
@@ -374,12 +378,12 @@ npx wrangler deploy
 
 ## ⚡ Performance & Engineering
 
-- **Off-Main-Thread Decoding**: Frames are fetched and parsed via `createImageBitmap` and `HTMLImageElement.decode()` off the main thread, maintaining fluid frame rates during rapid scrolling.
-- **Binary Search Keyframe Resolution**: Nearest loaded keyframe resolution uses $O(\log N)$ binary search across a sorted index array for immediate frame fallback.
-- **Active Scroll Limiter**: Dynamic velocity tracking throttles excessive wheel acceleration to keep frame decoding balanced with viewport updates.
-- **High-DPR Aspect Ratio Fit**: Canvas sizing dynamically computes `devicePixelRatio` and letterbox/cover aspect ratio fit to ensure crisp rendering on 4K, Retina, and mobile viewports.
-- **GPU-Accelerated Compositing**: All spatial movements (`--gallery-tx`, `--hero-ty`) use `translate3d()` transforms to avoid triggering CPU paint cycles.
-- **Memory-Bounded Cache**: Dynamic LRU cache eviction protects low-RAM mobile browsers from tab crashes while preserving smooth playback.
+- **Single-Pass GPU Shaders (WebGPU + WebGL2)**: [`webgpuScrollyShader.ts`](app/lib/webgpuScrollyShader.ts) (`shaders/std` + `shaders/js`) and [`gpuFrameRenderer.ts`](app/lib/gpuFrameRenderer.ts) compute `object-fit: cover` UVs, Hermite cross-dissolve blending, and the vignette in one fragment pass—cutting fill-rate in half vs. dual 2D canvas blits.
+- **Zero-Retention System RAM & Recycled VRAM Pool**: Decoded `ImageBitmap`s are uploaded to GPU textures (`tex.write` / `gl.texSubImage2D`) and immediately closed (`close()`), while evicted textures are recycled through a bounded `freePool` to prevent Metal/WebGL texture allocation stalls.
+- **On-Demand `requestAnimationFrame` & Upload Throttling**: Both `ScrollytellingEngine` and `WallGalleryOverlay` sleep at 0% CPU/GPU when scroll inertia settles, waking on user input; lookahead GPU uploads are throttled to 1 texture per frame.
+- **Safari 60 FPS Compositor Tuning**: Replaces heavy `backdrop-blur-*` and CSS `filter: drop-shadow(...)` layers over the canvas with solid-alpha surfaces and `text-shadow`, batches `CacheStorage` writes, and serves `720p` frames on desktop Safari for fast WebKit decode.
+- **Off-Main-Thread Decoding & Bounded LRU Cache**: Frames decode via `createImageBitmap` off the main thread, with motion-aware idle trimming and bounded Tier-1/Tier-2 caches.
+- **GPU-Accelerated Compositing**: Spatial movements (`--gallery-tx`, `--hero-ty`) use `translate3d()` transforms to avoid triggering CPU layout/paint cycles.
 
 ---
 

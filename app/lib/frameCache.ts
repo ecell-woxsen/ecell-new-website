@@ -121,28 +121,28 @@ export async function unpackAndCacheFrames(
   const count = view.getUint32(0, true);
   let offset = 4 + count * 4;
 
-  const writes: Promise<void>[] = [];
-  for (let i = 0; i < count; i++) {
-    const len = view.getUint32(4 + i * 4, true);
-    const phys = start + i;
-    const path = getFrameCachePath(phys, variant);
+  const BATCH_SIZE = 4;
+  for (let i = 0; i < count; i += BATCH_SIZE) {
+    const batch: Promise<void>[] = [];
+    const end = Math.min(count, i + BATCH_SIZE);
+    for (let j = i; j < end; j++) {
+      const len = view.getUint32(4 + j * 4, true);
+      const phys = start + j;
+      const path = getFrameCachePath(phys, variant);
 
-    // Create slice for this frame
-    const frameBytes = new Uint8Array(buffer, offset, len);
-    const response = new Response(frameBytes, {
-      headers: {
-        "Content-Type": "image/webp",
-        "Cache-Control": "public, max-age=31536000, immutable",
-      },
-    });
+      const frameBytes = new Uint8Array(buffer, offset, len);
+      const response = new Response(frameBytes, {
+        headers: {
+          "Content-Type": "image/webp",
+          "Cache-Control": "public, max-age=31536000, immutable",
+        },
+      });
 
-    writes.push(
-      frameCache.put(path, response).catch(() => {})
-    );
-    offset += len;
+      batch.push(frameCache.put(path, response).catch(() => {}));
+      offset += len;
+    }
+    await Promise.all(batch);
   }
-
-  await Promise.all(writes);
 }
 
 /**
@@ -213,8 +213,8 @@ export async function preloadAllPacks(
     }
   };
 
-  // 3. Process timeline packs with concurrency = 6
-  const CONCURRENCY = 6;
+  // 3. Process timeline packs with bounded concurrency = 2 to avoid Safari CacheStorage RAM spikes
+  const CONCURRENCY = 2;
   const packIndices: number[] = Array.from({ length: TOTAL_PACKS }, (_, i) => i);
   let queueIndex = 0;
 

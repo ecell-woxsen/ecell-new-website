@@ -195,7 +195,7 @@ h1, h2, h3, h4, h5, h6, .font-heading {
 
 .gallery-event-card[data-active="true"] .event-card-label {
   color: rgb(238, 73, 92) !important;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.95)) !important;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.95) !important;
 }
 
 .gallery-event-card[data-active="true"] .event-card-title {

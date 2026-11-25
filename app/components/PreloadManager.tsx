@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import { ArrowRight } from "lucide-react";
+import { Shader, RadialGradient } from "shaders/react";
 import { getAssetUrl } from "../lib/assets";
 
 interface PreloadManagerProps {
@@ -19,6 +20,7 @@ export default function PreloadManager({ progress, isReady, onEnter }: PreloadMa
   const [visible, setVisible] = useState(true);
   const [canSkip, setCanSkip] = useState(false);
   const [displayProgress, setDisplayProgress] = useState(0);
+  const [shaderUnavailable, setShaderUnavailable] = useState(false);
   const hasExitedRef = useRef(false);
 
   // Smooth progress interpolation to ensure 60fps counter glide without infinite loop
@@ -87,8 +89,25 @@ export default function PreloadManager({ progress, isReady, onEnter }: PreloadMa
       }`}
       aria-label="Loading Experience"
     >
-      {/* Subtle ambient lighting */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-72 sm:w-96 h-72 sm:h-96 bg-[#ee495c]/15 rounded-full blur-3xl pointer-events-none" />
+      {/* Subtle ambient lighting via Shaders.com WebGPU (with CSS radial fallback) */}
+      <div className="absolute inset-0 pointer-events-none opacity-40">
+        {!shaderUnavailable ? (
+          <Shader
+            className="w-full h-full"
+            disableTelemetry
+            onUnavailable={() => setShaderUnavailable(true)}
+          >
+            <RadialGradient
+              colorA="#ee495c"
+              colorB="#040608"
+              center={{ x: 0.5, y: 0.5 }}
+              radius={0.45}
+            />
+          </Shader>
+        ) : (
+          <div className="w-full h-full bg-[radial-gradient(circle_at_center,rgba(238,73,92,0.22)_0%,transparent_55%)]" />
+        )}
+      </div>
 
       <div className="relative flex flex-col items-center max-w-sm w-full text-center">
         {/* Clean Logo without glass card */}

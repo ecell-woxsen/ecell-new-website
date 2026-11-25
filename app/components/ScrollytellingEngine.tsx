@@ -28,6 +28,9 @@ import {
   getFrameBlobFromCache,
   unpackAndCacheFrames,
 } from "../lib/frameCache";
+import { GpuFrameRenderer, type GpuUploadableAsset, type ScrollyRenderer } from "../lib/gpuFrameRenderer";
+import { WebGpuScrollyRenderer } from "../lib/webgpuScrollyShader";
+import { isWebGPUSupported } from "shaders/js";
 
 interface ScrollytellingEngineProps {
   onFrameUpdate?: (frame: number) => void;
@@ -70,13 +73,13 @@ const LOOKAHEAD_FORWARD = 32;
 const LOOKAHEAD_BACKWARD = 12;
 const PREFETCH_ABORT_DISTANCE = 40; // abort in-flight requests this far from the playhead
 
-// Decode pipeline: decode-ahead is sized to stay INSIDE the bitmap cache cap
+// Decode pipeline: decode-ahead is sized to stay INSIDE the texture/bitmap cache cap
 // so the queue never churns evict/re-decode cycles at 60fps/120fps.
-const DECODE_BACK = 6;
-const DECODE_FORWARD_DESKTOP = 20; // t-6..t+20 = 27 frames ≤ 26-28 cap
-const DECODE_FORWARD_TABLET = 14;   // t-6..t+14 = 20 frames ≤ 20 tablet cap
-const DECODE_FORWARD_MOBILE = 10;   // t-6..t+10 = 16 frames ≤ 16 mobile cap
-const MAX_CONCURRENT_DECODES = 8;
+const DECODE_BACK = 3;
+const DECODE_FORWARD_DESKTOP = 10; // t-3..t+10 = 14 frames ≤ 14 cap
+const DECODE_FORWARD_TABLET = 8;   // t-3..t+8  = 12 frames ≤ 12 tablet cap
+const DECODE_FORWARD_MOBILE = 6;   // t-3..t+6  = 10 frames ≤ 10 mobile cap
+const MAX_CONCURRENT_DECODES = 4;
 
 const getDecodeForward = (variant: AssetVariant): number =>
   variant === "mobile_720p"
@@ -95,22 +98,18 @@ const getDecodeForward = (variant: AssetVariant): number =>
 // cap" into "at cap only while actively moving" — idle sessions sit at a
 // fraction of the peak budget.
 const IDLE_TRIM_DELAY_MS = 3000;
-const IDLE_TRIM_CAP_DESKTOP = 12;
-const IDLE_TRIM_CAP_TABLET = 10;
-const IDLE_TRIM_CAP_MOBILE = 8;
+const IDLE_TRIM_CAP_DESKTOP = 6;
+const IDLE_TRIM_CAP_TABLET = 5;
+const IDLE_TRIM_CAP_MOBILE = 4;
 // Below this velocity the playhead is considered "still" (EMA decays to 0
 // within a frame of stopping; nav deceleration keeps velocity above this
 // until arrival, so the trim never fires mid-approach).
 const MOTION_VELOCITY_THRESHOLD = 0.5;
 
-// Bounded bitmap cache capacities (calibrated for high-framerate fluidity).
-// Frames decode at a viewport-clamped resolution (see getDecodeTarget), so:
-// Desktop (1080p): 26 bitmaps * ≤5.76MB (1600×900) ≈ 150MB peak / 69MB idle
-// Tablet (720p):   20 bitmaps * 3.68MB ≈ 74MB peak RAM
-// Mobile (720p):   16 bitmaps * 1.16MB ≈ 19MB peak RAM
-const MAX_BITMAP_CACHE_SIZE_DESKTOP = 26;
-const MAX_BITMAP_CACHE_SIZE_TABLET = 20;
-const MAX_BITMAP_CACHE_SIZE_MOBILE = 16;
+// Bounded GPU texture / bitmap cache capacities (keeps Safari VRAM/RAM low).
+const MAX_BITMAP_CACHE_SIZE_DESKTOP = 14;
+const MAX_BITMAP_CACHE_SIZE_TABLET = 12;
+const MAX_BITMAP_CACHE_SIZE_MOBILE = 10;
 
 const getDecodeConcurrency = (): number => {
   if (typeof window === "undefined" || typeof navigator === "undefined") return 4;
@@ -127,8 +126,8 @@ const getDecodeConcurrency = (): number => {
 // nearly free: the CDN serves immutable cache headers and every fetch uses
 // cache: "force-cache", so a re-fetch after eviction is a browser disk-cache
 // hit — no network round trip, no visible stall on scroll-back.
-const BLOB_WARM_PACK_RADIUS = 3; // idle warm corridor: ±3 packs (±48 frames)
-const BLOB_EVICT_PACK_RADIUS = 3; // hard eviction boundary: ±3 packs (±48 frames in RAM)
+const BLOB_WARM_PACK_RADIUS = 1; // idle warm corridor: ±1 pack (±16 frames)
+const BLOB_EVICT_PACK_RADIUS = 1; // hard eviction boundary: ±1 pack (±16 frames in RAM)
 
 // Failed-frame retry with exponential backoff (previously failures left
 // permanent holes that were re-fetched on every corridor pass).
@@ -153,15 +152,22 @@ const ENDPOINT_BACKOFF_MAX_MS = 60_000;
 const VARIANT_SWITCH_DEBOUNCE_MS = 300;
 const RESIZE_DEBOUNCE_MS = 150;
 
+const isSafariBrowser =
+  typeof navigator !== "undefined" &&
+  /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
 const resolveDeviceVariant = (): AssetVariant => {
   if (typeof window === "undefined") return "1080p";
   if (window.innerWidth < 768) return "mobile_720p";
-  if (window.innerWidth < 1024) return "720p";
+  // Safari decodes/uploads 720p ~2.5x faster than 1080p, unlocking steady 60fps
+  if (window.innerWidth < 1024 || isSafariBrowser) return "720p";
   return "1080p";
 };
 
-// Image asset type: ImageBitmap (decoded off-main-thread) or HTMLImageElement fallback
-type FrameAsset = ImageBitmap | HTMLImageElement;
+// Image asset type: ImageBitmap (decoded off-main-thread), HTMLImageElement fallback,
+// or lightweight metadata when pixel data has been uploaded to VRAM and closed.
+type GpuFrameMeta = { width: number; height: number; isGpu: true };
+type FrameAsset = ImageBitmap | HTMLImageElement | GpuFrameMeta;
 
 const physOfKey = (key: string): number => parseInt(key.slice(key.indexOf(":") + 1), 10);
 const closeAsset = (asset: FrameAsset) => {
@@ -210,7 +216,7 @@ const cancelIdle: (id: IdleHandle) => void =
     : (id) => clearTimeout(id as unknown as ReturnType<typeof setTimeout>);
 
 // Native off-thread bitmap decoder (no slow software resampler on the main thread)
-const decodeViaImageElement = (blob: Blob): Promise<FrameAsset | null> =>
+const decodeViaImageElement = (blob: Blob): Promise<GpuUploadableAsset | null> =>
   new Promise((resolve) => {
     const img = new Image();
     img.crossOrigin = "anonymous";
@@ -227,12 +233,16 @@ const decodeViaImageElement = (blob: Blob): Promise<FrameAsset | null> =>
   });
 
 // Native off-thread bitmap decoder (hardware-accelerated, non-blocking)
-const decodeAsset = (blob: Blob): Promise<FrameAsset | null> => {
+const decodeAsset = (blob: Blob): Promise<GpuUploadableAsset | null> => {
   if (typeof window !== "undefined" && "createImageBitmap" in window) {
+    // Safari can reject or stall on colorSpaceConversion/premultiplyAlpha options
+    if (isSafariBrowser) {
+      return createImageBitmap(blob).catch(() => decodeViaImageElement(blob));
+    }
     return createImageBitmap(blob, {
       colorSpaceConversion: "none",
       premultiplyAlpha: "default",
-    }).catch(() => decodeViaImageElement(blob));
+    }).catch(() => createImageBitmap(blob).catch(() => decodeViaImageElement(blob)));
   }
   return decodeViaImageElement(blob);
 };
@@ -246,6 +256,10 @@ function ScrollytellingEngine({
 }: ScrollytellingEngineProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
+  const gpuRendererRef = useRef<ScrollyRenderer | null>(null);
+  const forceWebGlRef = useRef(false);
+  const [canvasEpoch, setCanvasEpoch] = useState(0);
+  const vignetteRef = useRef<HTMLDivElement | null>(null);
   const videoWrapperRef = useRef<HTMLDivElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -291,6 +305,7 @@ function ScrollytellingEngine({
   const lastScheduledIntegerRef = useRef<number>(-1);
   const scheduleRef = useRef<((center: number, velocity: number) => void) | null>(null);
   const scheduleIdleStreamRef = useRef<() => void>(() => {});
+  const wakeLoopRef = useRef<(() => void) | null>(null);
 
   // React state for boot & overlays
   const [loadProgress, setLoadProgress] = useState(0);
@@ -552,6 +567,7 @@ function ScrollytellingEngine({
     for (const [key, asset] of bitmapCacheRef.current) {
       if (!key.startsWith(`${variant}:`)) {
         closeAsset(asset);
+        gpuRendererRef.current?.evictTexture(key);
         bitmapCacheRef.current.delete(key);
       }
     }
@@ -592,6 +608,7 @@ function ScrollytellingEngine({
       const asset = bitmapCacheRef.current.get(k);
       if (asset) {
         closeAsset(asset);
+        gpuRendererRef.current?.evictTexture(k);
         bitmapCacheRef.current.delete(k);
         excess--;
       }
@@ -709,6 +726,9 @@ function ScrollytellingEngine({
           if (!unmountedRef.current) {
             const cur = getPhysicalFrameNumber(currentFrameRef.current);
             if (variant === assetVariantRef.current) {
+              // Store decoded ImageBitmap briefly; drawFrameToCanvas / renderLoop uploads
+              // at most 1-2 per frame to prevent main-thread texImage2D bursts on Safari,
+              // then closes the ImageBitmap immediately after GPU upload.
               bitmapCacheRef.current.set(key, asset);
               pruneBitmapCache(cur);
 
@@ -722,6 +742,7 @@ function ScrollytellingEngine({
                 lastDrawnFrameRef.current = -1; // force redraw
                 drawFrameToCanvasRef.current?.(currentFrameRef.current);
               }
+              wakeLoopRef.current?.();
             } else {
               closeAsset(asset); // stale variant completion — release immediately
               stats.decodeDrops++;
@@ -1315,7 +1336,7 @@ function ScrollytellingEngine({
 
       // Resolve Next Frame B (cross-fade target)
       let drawKeyB: string | null = null;
-      let assetB: ImageBitmap | HTMLImageElement | null = null;
+      let assetB: FrameAsset | null = null;
       const shouldBlend = blendAlpha > 0.01 && absVel <= 350 && targetPhysicalA !== targetPhysicalB;
 
       if (shouldBlend) {
@@ -1349,12 +1370,74 @@ function ScrollytellingEngine({
         return;
       }
 
-      let dpr = Math.min(window.devicePixelRatio || 1, 1.5);
-      // Canvas backing store: match device pixels, bounded by max source frame width (1920)
-      // to eliminate wasted GPU buffer allocation and fill-rate cost.
-      const targetWidth = Math.min(1920, Math.round(width * dpr));
+      let dpr = Math.min(window.devicePixelRatio || 1, isSafariBrowser ? 1.0 : 1.5);
+      // Canvas backing store: match 720p native width (1280) on Safari for 1:1 60fps fill-rate
+      const maxBackingWidth = isSafariBrowser ? 1280 : 1920;
+      const targetWidth = Math.min(maxBackingWidth, Math.round(width * dpr));
       const targetHeight = Math.round((targetWidth * height) / width);
       dpr = targetWidth / width;
+
+      // Primary path: Single-pass WebGL2 GPU shader renderer (zero 2D overdraw)
+      const renderer = gpuRendererRef.current;
+      if (renderer?.isReady()) {
+        // Guard against orphaned GPU metadata (e.g. after context loss/reset)
+        if ("isGpu" in assetA && !renderer.hasTexture(drawKeyA)) {
+          bitmapCacheRef.current.delete(drawKeyA);
+          if (blobCacheRef.current.has(drawKeyA)) enqueueDecode(drawKeyA, true);
+          return;
+        }
+        let validKeyB = assetB && drawKeyB ? drawKeyB : null;
+        if (assetB && validKeyB && "isGpu" in assetB && !renderer.hasTexture(validKeyB)) {
+          bitmapCacheRef.current.delete(validKeyB);
+          if (blobCacheRef.current.has(validKeyB)) enqueueDecode(validKeyB, true);
+          validKeyB = null;
+        }
+
+        const imgW = "naturalWidth" in assetA && assetA.naturalWidth ? assetA.naturalWidth : assetA.width;
+        const imgH = "naturalHeight" in assetA && assetA.naturalHeight ? assetA.naturalHeight : assetA.height;
+        if (!imgW || !imgH) return;
+
+        if (!renderer.hasTexture(drawKeyA) && !("isGpu" in assetA)) {
+          if (renderer.uploadTexture(drawKeyA, assetA)) {
+            closeAsset(assetA);
+            bitmapCacheRef.current.set(drawKeyA, { width: imgW, height: imgH, isGpu: true });
+          }
+        }
+        if (assetB && validKeyB && !renderer.hasTexture(validKeyB) && !("isGpu" in assetB)) {
+          const bW = "naturalWidth" in assetB && assetB.naturalWidth ? assetB.naturalWidth : assetB.width;
+          const bH = "naturalHeight" in assetB && assetB.naturalHeight ? assetB.naturalHeight : assetB.height;
+          if (renderer.uploadTexture(validKeyB, assetB)) {
+            closeAsset(assetB);
+            bitmapCacheRef.current.set(validKeyB, { width: bW, height: bH, isGpu: true });
+          }
+        }
+
+        const rendered = renderer.render(
+          drawKeyA,
+          validKeyB,
+          shouldBlend && validKeyB ? blendAlpha : 0,
+          targetWidth,
+          targetHeight,
+          imgW,
+          imgH
+        );
+
+        if (rendered) {
+          stats.drawn++;
+          lastDrawnKeyRef.current = drawKeyA;
+          lastDrawnKeyBRef.current = validKeyB;
+          lastDrawnFrameRef.current = physOfKey(drawKeyA);
+          lastDrawnFloatRef.current = frameFloat;
+          lastDrawnWidthRef.current = width;
+          lastDrawnHeightRef.current = height;
+          return;
+        }
+      }
+
+      if ("isGpu" in assetA || (assetB && "isGpu" in assetB)) {
+        // Asset is GPU-only metadata and GPU renderer is unavailable (e.g. context lost)
+        return;
+      }
 
       let ctx = ctxRef.current;
       if (canvas.width !== targetWidth || canvas.height !== targetHeight || !ctx) {
@@ -1464,6 +1547,7 @@ function ScrollytellingEngine({
       for (const [key, asset] of bitmapCacheRef.current) {
         if (key.startsWith(`${old}:`)) {
           closeAsset(asset);
+          gpuRendererRef.current?.evictTexture(key);
           bitmapCacheRef.current.delete(key);
         }
       }
@@ -1529,12 +1613,101 @@ function ScrollytellingEngine({
   }, [drawFrameToCanvas]);
 
   // =========================================================================
+  // GPU SHADER RENDERER LIFECYCLE (Shaders.com WebGPU primary -> WebGL2 -> 2D)
+  // =========================================================================
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    let cancelled = false;
+    let activeRenderer: ScrollyRenderer | null = null;
+
+    const activateRenderer = (renderer: ScrollyRenderer) => {
+      activeRenderer = renderer;
+      gpuRendererRef.current = renderer;
+      if (vignetteRef.current) {
+        vignetteRef.current.style.display = "none";
+      }
+
+      // Upload any bitmaps that decoded before the renderer mounted
+      for (const [k, asset] of bitmapCacheRef.current) {
+        if (!("isGpu" in asset) && renderer.uploadTexture(k, asset)) {
+          const w = "naturalWidth" in asset && asset.naturalWidth ? asset.naturalWidth : asset.width;
+          const h = "naturalHeight" in asset && asset.naturalHeight ? asset.naturalHeight : asset.height;
+          closeAsset(asset);
+          bitmapCacheRef.current.set(k, { width: w, height: h, isGpu: true });
+        }
+      }
+
+      lastDrawnFrameRef.current = -1;
+      drawFrameToCanvasRef.current?.(currentFrameRef.current);
+    };
+
+    const initWebGlFallback = () => {
+      const glRenderer = new GpuFrameRenderer();
+      const ok = glRenderer.init(canvas, () => {
+        bitmapCacheRef.current.clear();
+        lastDrawnKeyRef.current = null;
+        lastDrawnKeyBRef.current = null;
+        lastDrawnFrameRef.current = -1;
+        scheduleRef.current?.(currentFrameRef.current, scrollVelocityRef.current);
+      });
+      if (ok) {
+        activateRenderer(glRenderer);
+      } else if (vignetteRef.current) {
+        vignetteRef.current.style.display = "";
+      }
+    };
+
+    if (!forceWebGlRef.current && isWebGPUSupported()) {
+      const wgpu = new WebGpuScrollyRenderer();
+      activeRenderer = wgpu;
+
+      wgpu
+        .init(canvas, () => {
+          if (cancelled) return;
+          // Fatal WebGPU device loss: remount fresh canvas & fall back to WebGL2
+          forceWebGlRef.current = true;
+          bitmapCacheRef.current.clear();
+          lastDrawnKeyRef.current = null;
+          lastDrawnKeyBRef.current = null;
+          lastDrawnFrameRef.current = -1;
+          setCanvasEpoch((e) => e + 1);
+        })
+        .then((ok) => {
+          if (cancelled) {
+            wgpu.dispose();
+            return;
+          }
+          if (ok) {
+            activateRenderer(wgpu);
+          } else {
+            wgpu.dispose();
+            forceWebGlRef.current = true;
+            setCanvasEpoch((e) => e + 1);
+          }
+        });
+    } else {
+      initWebGlFallback();
+    }
+
+    return () => {
+      cancelled = true;
+      if (activeRenderer) {
+        activeRenderer.dispose();
+        if (gpuRendererRef.current === activeRenderer) {
+          gpuRendererRef.current = null;
+        }
+      }
+    };
+  }, [canvasEpoch]);
+
+  // =========================================================================
   // PROGRESSIVE BOOT (unified loader, scroll-locked, right-sized corridor)
   // =========================================================================
   useEffect(() => {
     unmountedRef.current = false;
     let isCancelled = false;
-    let bootInterval: ReturnType<typeof setInterval> | null = null;
     let bootTimeout: ReturnType<typeof setTimeout> | null = null;
 
     // Lock native scroll while the splash is up (prevents scrolling into
@@ -1600,9 +1773,10 @@ function ScrollytellingEngine({
       inflightRef.current.clear();
       for (const entry of packInflightRef.current.values()) entry.controller.abort();
       packInflightRef.current.clear();
-      // Free decoded bitmaps + compressed blobs + decode queue + breaker state
+      // Free decoded bitmaps + GPU textures + compressed blobs + decode queue + breaker state
       for (const asset of bitmapCacheRef.current.values()) closeAsset(asset);
       bitmapCacheRef.current.clear();
+      gpuRendererRef.current?.clearTextures();
       blobCacheRef.current.clear();
       lastDrawnKeyRef.current = null;
       lastBlobPrunePackRef.current = -1;
@@ -1675,6 +1849,7 @@ function ScrollytellingEngine({
         targetFrame: target,
         onComplete: onDone,
       };
+      wakeLoopRef.current?.();
     },
     [onFrameUpdate]
   );
@@ -1806,7 +1981,10 @@ function ScrollytellingEngine({
     window.addEventListener("touchstart", handleUserInterruption, { passive: true });
     window.addEventListener("keydown", handleUserInterruption, { passive: true });
 
-    let animFrameId: number;
+    let animFrameId = 0;
+    let rafActive = false;
+    let isSleeping = false;
+    let idleTicks = 0;
     let debugInterval: ReturnType<typeof setInterval> | null = null;
 
     const debugParams = new URLSearchParams(window.location.search);
@@ -1818,6 +1996,7 @@ function ScrollytellingEngine({
         for (const b of blobCacheRef.current.values()) blobBytes += b.size;
         let bitmapBytes = 0;
         for (const asset of bitmapCacheRef.current.values()) {
+          if ("isGpu" in asset) continue; // ImageBitmap closed; lives in VRAM only
           // Exact per-asset footprint (resized ImageBitmaps included)
           const w = "naturalWidth" in asset && asset.naturalWidth ? asset.naturalWidth : asset.width;
           const h = "naturalHeight" in asset && asset.naturalHeight ? asset.naturalHeight : asset.height;
@@ -1831,6 +2010,7 @@ function ScrollytellingEngine({
           idlePacks: idlePackCountRef.current,
           blobs: blobCacheRef.current.size,
           bitmaps: bitmapCacheRef.current.size,
+          gpuTextures: gpuRendererRef.current?.getTextureCount() ?? 0,
           blobMB: (blobBytes / 1048576).toFixed(1),
           bitmapMB: (bitmapBytes / 1048576).toFixed(1),
           blocked: blockedKeysRef.current.size,
@@ -1855,6 +2035,7 @@ function ScrollytellingEngine({
     };
 
     const renderLoop = (time: number) => {
+      rafActive = false;
       const now = performance.now();
       const dt = Math.min(0.05, Math.max(0.001, (now - lastTimeRef.current) / 1000));
       lastTimeRef.current = now;
@@ -2104,14 +2285,89 @@ function ScrollytellingEngine({
         }
       }
 
-      animFrameId = requestAnimationFrame(renderLoop);
+      // Trickle-upload at most 1 pre-decoded lookahead bitmap per frame to GPU
+      // so Safari never hits a multi-frame texImage2D main-thread stall.
+      let hasPendingGpuUpload = false;
+      const gpuRenderer = gpuRendererRef.current;
+      if (gpuRenderer?.isReady()) {
+        for (const [k, entry] of bitmapCacheRef.current) {
+          if (!("isGpu" in entry)) {
+            const w = "naturalWidth" in entry && entry.naturalWidth ? entry.naturalWidth : entry.width;
+            const h = "naturalHeight" in entry && entry.naturalHeight ? entry.naturalHeight : entry.height;
+            if (gpuRenderer.uploadTexture(k, entry)) {
+              closeAsset(entry);
+              bitmapCacheRef.current.set(k, { width: w, height: h, isGpu: true });
+            }
+            hasPendingGpuUpload = true;
+            break;
+          }
+        }
+      }
+
+      const scheduleNext = () => {
+        if (!rafActive) {
+          rafActive = true;
+          animFrameId = requestAnimationFrame(renderLoop);
+        }
+      };
+
+      const isSettled =
+        !navSimulationRef.current.active &&
+        !hasPendingGpuUpload &&
+        Math.abs(targetFloat - renderFloat) < 0.001 &&
+        Math.abs(velocity) < 0.01 &&
+        Math.abs(lenis.velocity) < 0.01 &&
+        idleTrimActiveRef.current;
+
+      if (isSettled) {
+        idleTicks++;
+      } else {
+        idleTicks = 0;
+      }
+
+      // Stop spinning RAF once settled & idle-trimmed (0% idle CPU/GPU)
+      if (idleTicks < 4) {
+        isSleeping = false;
+        scheduleNext();
+      } else {
+        isSleeping = true;
+        gpuRendererRef.current?.setPaused?.(true);
+      }
     };
 
-    animFrameId = requestAnimationFrame(renderLoop);
+    const wakeLoop = () => {
+      idleTicks = 0;
+      if (isSleeping) {
+        isSleeping = false;
+        lastTimeRef.current = performance.now();
+        gpuRendererRef.current?.setPaused?.(false);
+      }
+      if (!rafActive) {
+        rafActive = true;
+        animFrameId = requestAnimationFrame(renderLoop);
+      }
+    };
+    wakeLoopRef.current = wakeLoop;
+
+    window.addEventListener("wheel", wakeLoop, { passive: true });
+    window.addEventListener("touchstart", wakeLoop, { passive: true });
+    window.addEventListener("touchmove", wakeLoop, { passive: true });
+    window.addEventListener("scroll", wakeLoop, { passive: true });
+    window.addEventListener("keydown", wakeLoop, { passive: true });
+    window.addEventListener("resize", wakeLoop, { passive: true });
+
+    wakeLoop();
 
     return () => {
-      cancelAnimationFrame(animFrameId);
+      wakeLoopRef.current = null;
+      if (animFrameId) cancelAnimationFrame(animFrameId);
       if (debugInterval) clearInterval(debugInterval);
+      window.removeEventListener("wheel", wakeLoop);
+      window.removeEventListener("touchstart", wakeLoop);
+      window.removeEventListener("touchmove", wakeLoop);
+      window.removeEventListener("scroll", wakeLoop);
+      window.removeEventListener("keydown", wakeLoop);
+      window.removeEventListener("resize", wakeLoop);
       window.removeEventListener("wheel", handleUserInterruption);
       window.removeEventListener("touchstart", handleUserInterruption);
       window.removeEventListener("keydown", handleUserInterruption);
@@ -2133,11 +2389,14 @@ function ScrollytellingEngine({
   // Respond to programmatic header navigation via simulated normal scrollback
   useEffect(() => {
     if (targetNavigationFrame !== null && targetNavigationFrame !== undefined) {
-      startSimulatedNavigation(targetNavigationFrame, () => {
-        if (onNavigationComplete) {
-          onNavigationComplete();
-        }
+      const id = requestAnimationFrame(() => {
+        startSimulatedNavigation(targetNavigationFrame, () => {
+          if (onNavigationComplete) {
+            onNavigationComplete();
+          }
+        });
       });
+      return () => cancelAnimationFrame(id);
     }
   }, [targetNavigationFrame, startSimulatedNavigation, onNavigationComplete]);
 
@@ -2179,8 +2438,10 @@ function ScrollytellingEngine({
       >
         {/* HTML5 High-Performance Scrollytelling Canvas */}
         <canvas
+          key={canvasEpoch}
           ref={canvasRef}
-          className="absolute inset-0 w-full h-full object-cover z-0 transform-gpu will-change-transform"
+          style={{ width: "100%", height: "100%" }}
+          className="absolute inset-0 w-full h-full object-cover z-0"
         />
 
         {/* Ambient Video (poster paints instantly; playback starts once the
@@ -2203,8 +2464,11 @@ function ScrollytellingEngine({
           />
         </div>
 
-        {/* Subtle Vignette for Depth */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/20 pointer-events-none z-10" />
+        {/* Subtle Vignette for Depth (hidden when WebGL2 shader renders vignette) */}
+        <div
+          ref={vignetteRef}
+          className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/20 pointer-events-none z-10"
+        />
 
         {/* Overlay 1: Hero Landing (Frames 1 - 35) */}
         <HeroOverlay

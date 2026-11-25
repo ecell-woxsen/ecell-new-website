@@ -98,10 +98,10 @@ export default function AudioController() {
   return (
     <button
       onClick={toggleAudio}
-      className={`fixed bottom-6 left-6 z-40 flex items-center gap-2.5 px-3.5 py-2 rounded-full border backdrop-blur-xl transition-all duration-300 shadow-xl ${
+      className={`fixed bottom-6 left-6 z-40 flex items-center gap-2.5 px-3.5 py-2 rounded-full border transition-all duration-300 shadow-xl ${
         isPlaying
-          ? "bg-[#ee495c]/20 border-[#ee495c]/40 text-white shadow-[#ee495c]/20"
-          : "bg-slate-950/70 border-white/10 text-slate-400 hover:text-white hover:border-[#ee495c]/40 hover:bg-[#ee495c]/10"
+          ? "bg-[#ee495c]/25 border-[#ee495c]/45 text-white shadow-[#ee495c]/20"
+          : "bg-slate-950/90 border-white/15 text-slate-400 hover:text-white hover:border-[#ee495c]/40 hover:bg-[#ee495c]/15"
       }`}
       title={isPlaying ? "Mute Ambient Soundscape" : "Play Ambient Soundscape"}
     >

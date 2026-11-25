@@ -29,7 +29,7 @@ function Header({
     <header className="fixed top-0 left-0 right-0 z-50 px-4 sm:px-8 pt-4 sm:pt-6 transition-all duration-500 pointer-events-none">
       <div className="max-w-7xl mx-auto flex items-center justify-center pointer-events-auto">
         {/* Center Floating Pill Navbar */}
-        <nav className="flex items-center gap-1.5 sm:gap-3 bg-black/70 border border-white/15 backdrop-blur-2xl px-2 sm:px-3 py-1.5 rounded-full shadow-2xl shadow-black/80">
+        <nav className="flex items-center gap-1.5 sm:gap-3 bg-black/85 border border-white/15 px-2 sm:px-3 py-1.5 rounded-full shadow-2xl shadow-black/80">
           {/* Logo */}
           <button
             onClick={() => onNavigateToFrame(1)}
@@ -106,7 +106,7 @@ function Header({
 
       {/* Mobile Drawer */}
       {mobileMenuOpen && (
-        <div className="md:hidden mt-3 p-4 rounded-2xl bg-slate-950/95 border border-white/15 backdrop-blur-2xl shadow-2xl flex flex-col gap-2 pointer-events-auto animate-in fade-in slide-in-from-top-4 duration-200 max-w-sm mx-auto">
+        <div className="md:hidden mt-3 p-4 rounded-2xl bg-slate-950/95 border border-white/15 shadow-2xl flex flex-col gap-2 pointer-events-auto animate-in fade-in slide-in-from-top-4 duration-200 max-w-sm mx-auto">
           {navItems.map((item) => (
             <button
               key={item.label}

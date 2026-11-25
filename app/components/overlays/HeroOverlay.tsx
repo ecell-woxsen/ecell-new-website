@@ -29,7 +29,7 @@ function HeroOverlay({
       <div className="relative z-10 max-w-[880px] mx-auto flex flex-col items-center text-center px-4 pointer-events-auto">
         {/* Subtitle / Eyebrow */}
         <p
-          className="font-mono text-[11px] tracking-[0.1em] uppercase text-white mb-6 animate-fade-up delay-1 text-center drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] select-none"
+          className="font-mono text-[11px] tracking-[0.1em] uppercase text-white mb-6 animate-fade-up delay-1 text-center [text-shadow:0_2px_4px_rgba(0,0,0,0.8)] select-none"
           style={{ textAlign: "center" }}
         >
           Entrepreneurship Cell · Woxsen University
@@ -37,7 +37,7 @@ function HeroOverlay({
 
         {/* Main Heading with Staggered Character Reveal */}
         <h1
-          className="font-display text-[clamp(44px,7.5vw,100px)] leading-[0.95] tracking-[-0.01em] text-white mb-8 text-center select-none drop-shadow-[0_4px_10px_rgba(0,0,0,0.8)]"
+          className="font-display text-[clamp(44px,7.5vw,100px)] leading-[0.95] tracking-[-0.01em] text-white mb-8 text-center select-none [text-shadow:0_4px_10px_rgba(0,0,0,0.8)]"
           style={{ textAlign: "center" }}
           aria-label="WHERE BUILDERS START."
         >
@@ -57,7 +57,7 @@ function HeroOverlay({
             {part2.split("").map((char, index) => (
               <span
                 key={`p2-${index}`}
-                className="inline-block text-[#ee495c] animate-letter-reveal text-[1.25em] drop-shadow-[0_0_24px_rgba(238,73,92,0.4)]"
+                className="inline-block text-[#ee495c] animate-letter-reveal text-[1.25em] [text-shadow:0_0_24px_rgba(238,73,92,0.4)]"
                 style={{
                   animationDelay: `${(part1.length + index) * 0.04}s`,
                   whiteSpace: char === " " ? "pre" : "normal",
@@ -83,7 +83,7 @@ function HeroOverlay({
 
         {/* Description */}
         <p
-          className="max-w-[560px] text-[15px] leading-[1.8] text-white font-light mb-10 animate-fade-up delay-3 text-center drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]"
+          className="max-w-[560px] text-[15px] leading-[1.8] text-white font-light mb-10 animate-fade-up delay-3 text-center [text-shadow:0_2px_4px_rgba(0,0,0,0.8)]"
           style={{ textAlign: "center", marginLeft: "auto", marginRight: "auto" }}
         >
           The Entrepreneurship Cell of Woxsen University. We build founders, not just businesses — through hands-on programs, mentorship, and a network that ships.
@@ -100,7 +100,7 @@ function HeroOverlay({
 
           <button
             onClick={onOpenJoinModal}
-            className="px-7 py-3 rounded-full bg-black/40 hover:bg-[#ee495c]/15 text-slate-200 hover:text-white text-xs sm:text-sm font-bold tracking-wider uppercase border border-white/20 hover:border-[#ee495c]/50 backdrop-blur-md transition-all hover:scale-105 active:scale-95 cursor-pointer max-sm:w-full"
+            className="px-7 py-3 rounded-full bg-black/75 hover:bg-[#ee495c]/20 text-slate-200 hover:text-white text-xs sm:text-sm font-bold tracking-wider uppercase border border-white/20 hover:border-[#ee495c]/50 transition-all hover:scale-105 active:scale-95 cursor-pointer max-sm:w-full"
           >
             Submit Your Idea
           </button>
@@ -109,10 +109,10 @@ function HeroOverlay({
 
       {/* Bottom Scroll Indicator */}
       <div className="absolute bottom-7 sm:bottom-9 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 pointer-events-none animate-fade-up delay-4 select-none">
-        <span className="font-mono text-[10px] sm:text-[11px] tracking-[0.25em] text-slate-400/90 uppercase drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
+        <span className="font-mono text-[10px] sm:text-[11px] tracking-[0.25em] text-slate-400/90 uppercase [text-shadow:0_2px_4px_rgba(0,0,0,0.8)]">
           Scroll to experience
         </span>
-        <div className="w-4 h-7 rounded-full border border-white/25 flex items-start justify-center p-1 bg-black/20 backdrop-blur-sm">
+        <div className="w-4 h-7 rounded-full border border-white/25 flex items-start justify-center p-1 bg-black/60">
           <div className="w-1 h-1.5 rounded-full bg-[#ee495c] animate-bounce shadow-[0_0_6px_#ee495c]" />
         </div>
       </div>

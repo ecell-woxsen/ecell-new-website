@@ -248,7 +248,7 @@ function EditorialPortraitSurface({
       ) : (
         /* Minimalist Editorial Monogram Silhouette Fallback */
         <div className="relative z-10 flex flex-col items-center justify-center p-6 text-center transition-all duration-500">
-          <span className="team-monogram font-display text-3xl sm:text-4xl tracking-wider uppercase text-slate-100/40 group-hover:text-[#ff7686] transition-all drop-shadow-md">
+          <span className="team-monogram font-display text-3xl sm:text-4xl tracking-wider uppercase text-slate-100/40 group-hover:text-[#ff7686] transition-all [text-shadow:0_2px_4px_rgba(0,0,0,0.85)]">
             {name.charAt(0)}
           </span>
         </div>
@@ -326,21 +326,21 @@ export default function TeamWallSection({
           {/* Level 1: Monospace Indexing */}
           <div className="flex items-center gap-3 h-6 mb-5">
             <span className="w-2 h-2 rounded-full bg-[#ee495c] shadow-[0_0_8px_rgba(238,73,92,0.7)]" />
-            <span className="font-mono text-[11px] sm:text-xs font-semibold tracking-[0.25em] uppercase text-[#ee495c] drop-shadow-[0_2px_6px_rgba(0,0,0,0.95)]">
+            <span className="font-mono text-[11px] sm:text-xs font-semibold tracking-[0.25em] uppercase text-[#ee495c] [text-shadow:0_2px_6px_rgba(0,0,0,0.95)]">
               02 — LEADERSHIP & MENTORSHIP
             </span>
             <span className="h-px w-10 bg-white/20" />
           </div>
 
           {/* Level 2: Monumental 3-Line Title */}
-          <h2 className="font-display text-5xl sm:text-6xl lg:text-7xl text-slate-50 tracking-[-0.01em] uppercase leading-[0.88] mb-6 drop-shadow-[0_4px_28px_rgba(0,0,0,0.98)]">
+          <h2 className="font-display text-5xl sm:text-6xl lg:text-7xl text-slate-50 tracking-[-0.01em] uppercase leading-[0.88] mb-6 [text-shadow:0_4px_28px_rgba(0,0,0,0.98)]">
             THE PEOPLE<br />
             BEHIND THE<br />
             MOVEMENT.
           </h2>
 
           {/* Level 3: Exhibition Subtitle Narrative */}
-          <p className="text-[15px] sm:text-[16px] text-slate-200/90 font-normal leading-[1.7] max-w-[340px] drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)]">
+          <p className="text-[15px] sm:text-[16px] text-slate-200/90 font-normal leading-[1.7] max-w-[340px] [text-shadow:0_2px_10px_rgba(0,0,0,0.95)]">
             The mentors, strategists, operators, and creators steering the venture ecosystem at Woxsen University.
           </p>
         </div>
@@ -405,10 +405,10 @@ export default function TeamWallSection({
 
             {/* Editorial Caption */}
             <div className="mt-4 text-left">
-              <h3 className="team-hero-name font-display text-xl sm:text-2xl lg:text-[26px] uppercase tracking-tight leading-tight text-slate-300/80 group-hover:text-[#ff7686] transition-colors drop-shadow-[0_3px_12px_rgba(0,0,0,0.98)] truncate">
+              <h3 className="team-hero-name font-display text-xl sm:text-2xl lg:text-[26px] uppercase tracking-tight leading-tight text-slate-300/80 group-hover:text-[#ff7686] transition-colors [text-shadow:0_3px_12px_rgba(0,0,0,0.98)] truncate">
                 {mentor.name}
               </h3>
-              <p className="team-hero-role font-mono text-[13px] sm:text-[14px] lg:text-[15px] font-normal tracking-wide mt-1.5 text-slate-400 drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)] transition-colors">
+              <p className="team-hero-role font-mono text-[13px] sm:text-[14px] lg:text-[15px] font-normal tracking-wide mt-1.5 text-slate-400 [text-shadow:0_2px_8px_rgba(0,0,0,0.95)] transition-colors">
                 {mentor.role}
               </p>
             </div>
@@ -440,10 +440,10 @@ export default function TeamWallSection({
           />
 
           <div className="mt-4 text-left">
-            <h3 className="team-hero-name font-display text-2xl sm:text-3xl lg:text-[32px] uppercase tracking-tight leading-tight text-slate-300/80 group-hover:text-[#ff7686] transition-colors drop-shadow-[0_3px_12px_rgba(0,0,0,0.98)]">
+            <h3 className="team-hero-name font-display text-2xl sm:text-3xl lg:text-[32px] uppercase tracking-tight leading-tight text-slate-300/80 group-hover:text-[#ff7686] transition-colors [text-shadow:0_3px_12px_rgba(0,0,0,0.98)]">
               {president?.name || "Mohnish Singh Patwal"}
             </h3>
-            <p className="team-hero-role font-mono text-[13px] sm:text-[14px] lg:text-[15px] font-normal tracking-wide mt-1.5 text-slate-400 drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)] transition-colors">
+            <p className="team-hero-role font-mono text-[13px] sm:text-[14px] lg:text-[15px] font-normal tracking-wide mt-1.5 text-slate-400 [text-shadow:0_2px_8px_rgba(0,0,0,0.95)] transition-colors">
               President & Strategic Lead
             </p>
           </div>
@@ -465,10 +465,10 @@ export default function TeamWallSection({
           />
 
           <div className="mt-4 text-left">
-            <h3 className="team-hero-name font-display text-xl sm:text-2xl lg:text-[26px] uppercase tracking-tight leading-tight text-slate-300/80 group-hover:text-[#ff7686] transition-colors drop-shadow-[0_3px_12px_rgba(0,0,0,0.98)]">
+            <h3 className="team-hero-name font-display text-xl sm:text-2xl lg:text-[26px] uppercase tracking-tight leading-tight text-slate-300/80 group-hover:text-[#ff7686] transition-colors [text-shadow:0_3px_12px_rgba(0,0,0,0.98)]">
               {vicePresident?.name || "Shreyas Kandi"}
             </h3>
-            <p className="team-hero-role font-mono text-[13px] sm:text-[14px] lg:text-[15px] font-normal tracking-wide mt-1.5 text-slate-400 drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)] transition-colors">
+            <p className="team-hero-role font-mono text-[13px] sm:text-[14px] lg:text-[15px] font-normal tracking-wide mt-1.5 text-slate-400 [text-shadow:0_2px_8px_rgba(0,0,0,0.95)] transition-colors">
               Vice President & Operations
             </p>
           </div>
@@ -507,10 +507,10 @@ export default function TeamWallSection({
 
                   {/* Museum Caption */}
                   <div className="mt-2 shrink-0">
-                    <h4 className="team-col-name font-display text-[16px] sm:text-[18px] lg:text-[19px] uppercase tracking-tight leading-snug text-slate-300/80 group-hover:text-[#ff7686] transition-colors drop-shadow-[0_2px_8px_rgba(0,0,0,0.98)] truncate">
+                    <h4 className="team-col-name font-display text-[16px] sm:text-[18px] lg:text-[19px] uppercase tracking-tight leading-snug text-slate-300/80 group-hover:text-[#ff7686] transition-colors [text-shadow:0_2px_8px_rgba(0,0,0,0.98)] truncate">
                       {member.name}
                     </h4>
-                    <p className="team-col-role font-mono text-[10.5px] sm:text-[11.5px] lg:text-[12px] tracking-tight mt-0.5 text-slate-400 drop-shadow-[0_2px_6px_rgba(0,0,0,0.95)] truncate transition-colors">
+                    <p className="team-col-role font-mono text-[10.5px] sm:text-[11.5px] lg:text-[12px] tracking-tight mt-0.5 text-slate-400 [text-shadow:0_2px_6px_rgba(0,0,0,0.95)] truncate transition-colors">
                       {member.role}
                     </p>
                   </div>

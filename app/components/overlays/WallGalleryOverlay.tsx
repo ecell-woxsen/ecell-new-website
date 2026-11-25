@@ -75,20 +75,18 @@ function WallGalleryOverlay({
 
   // Real-time, zero-reflow center-card focus detector
   // Uses pure arithmetic against cached geometry & direct style property lookup
+  // Wakes on scroll/wheel/touch/resize and stops once Lenis inertia settles (0% idle CPU)
   useEffect(() => {
-    let rafId: number;
+    let rafId = 0;
     let lastCheck = 0;
+    let activeUntil = 0;
+    let lastTxRaw = "";
     let cachedEventCards: HTMLElement[] | null = null;
     let cachedTeamItems: HTMLElement[] | null = null;
     let cachedContactSection: HTMLElement | null = null;
 
     const updateActiveCards = (time: number) => {
-      rafId = requestAnimationFrame(updateActiveCards);
-
-      // ~25Hz check (every ~40ms) is ideal for 0.35s CSS transitions
-      // with zero layout reads and zero compositor stalls
-      if (time - lastCheck < 40) return;
-      lastCheck = time;
+      rafId = 0;
 
       const track = trackRef.current;
       if (!track) return;
@@ -101,107 +99,135 @@ function WallGalleryOverlay({
       const vis = container.style.getPropertyValue("--gallery-vis") || parent?.style.getPropertyValue("--gallery-vis");
       if (vis === "hidden") return;
 
-      const txRaw = container.style.getPropertyValue("--gallery-tx");
-      const tx = parseFloat(txRaw) || 0;
-      const screenCenter = window.innerWidth / 2;
+      // ~25Hz check (every ~40ms) is ideal for 0.35s CSS transitions
+      if (time - lastCheck >= 40) {
+        lastCheck = time;
 
-      // 1. Events Section: Find closest event card using cached geometry
-      const eventCenters = eventCentersRef.current;
-      if (eventCenters.length > 0) {
-        if (!cachedEventCards || cachedEventCards.length === 0) {
-          cachedEventCards = Array.from(track.querySelectorAll<HTMLElement>(".gallery-event-card"));
-        }
+        const txRaw = container.style.getPropertyValue("--gallery-tx");
+        if (txRaw !== lastTxRaw) {
+          lastTxRaw = txRaw;
+          const tx = parseFloat(txRaw) || 0;
+          const screenCenter = window.innerWidth / 2;
 
-        let closestEventIdx = 0;
-        let minEventDist = Infinity;
-        for (let i = 0; i < eventCenters.length; i++) {
-          const dist = Math.abs(tx + eventCenters[i] - screenCenter);
-          if (dist < minEventDist) {
-            minEventDist = dist;
-            closestEventIdx = i;
+          // 1. Events Section: Find closest event card using cached geometry
+          const eventCenters = eventCentersRef.current;
+          if (eventCenters.length > 0) {
+            if (!cachedEventCards || cachedEventCards.length === 0) {
+              cachedEventCards = Array.from(track.querySelectorAll<HTMLElement>(".gallery-event-card"));
+            }
+
+            let closestEventIdx = 0;
+            let minEventDist = Infinity;
+            for (let i = 0; i < eventCenters.length; i++) {
+              const dist = Math.abs(tx + eventCenters[i] - screenCenter);
+              if (dist < minEventDist) {
+                minEventDist = dist;
+                closestEventIdx = i;
+              }
+            }
+
+            if (closestEventIdx !== activeEventIdxRef.current && cachedEventCards.length > 0) {
+              activeEventIdxRef.current = closestEventIdx;
+              for (let i = 0; i < cachedEventCards.length; i++) {
+                const card = cachedEventCards[i];
+                const isActive = i === closestEventIdx;
+                const cur = card.getAttribute("data-active");
+                if (isActive && cur !== "true") {
+                  card.setAttribute("data-active", "true");
+                } else if (!isActive && cur !== "false") {
+                  card.setAttribute("data-active", "false");
+                }
+              }
+            }
           }
-        }
 
-        if (closestEventIdx !== activeEventIdxRef.current && cachedEventCards.length > 0) {
-          activeEventIdxRef.current = closestEventIdx;
-          for (let i = 0; i < cachedEventCards.length; i++) {
-            const card = cachedEventCards[i];
-            const isActive = i === closestEventIdx;
-            const cur = card.getAttribute("data-active");
-            if (isActive && cur !== "true") {
-              card.setAttribute("data-active", "true");
-            } else if (!isActive && cur !== "false") {
-              card.setAttribute("data-active", "false");
+          // 2. Team Section: Find closest team column or hero using cached geometry
+          const teamCenters = teamCentersRef.current;
+          let closestTeamIdx = 0;
+          let minTeamDist = Infinity;
+
+          if (teamCenters.length > 0) {
+            if (!cachedTeamItems || cachedTeamItems.length === 0) {
+              cachedTeamItems = Array.from(track.querySelectorAll<HTMLElement>(".gallery-team-item"));
+            }
+
+            for (let i = 0; i < teamCenters.length; i++) {
+              const dist = Math.abs(tx + teamCenters[i] - screenCenter);
+              if (dist < minTeamDist) {
+                minTeamDist = dist;
+                closestTeamIdx = i;
+              }
+            }
+          }
+
+          // 3. Contact Section: Detect when Contact arrives in view or reaches end of track
+          const contactCenter = contactCenterRef.current;
+          let isContactActive = false;
+
+          if (contactCenter > 0) {
+            const distToContact = Math.abs(tx + contactCenter - screenCenter);
+            isContactActive = distToContact < minTeamDist || distToContact < 650;
+
+            if (isContactActive !== isContactActiveRef.current) {
+              isContactActiveRef.current = isContactActive;
+              if (!cachedContactSection) {
+                cachedContactSection = track.querySelector<HTMLElement>(".gallery-contact-section");
+              }
+              if (cachedContactSection) {
+                cachedContactSection.setAttribute("data-active", isContactActive ? "true" : "false");
+              }
+            }
+          }
+
+          // If Contact is active, deactivate all team items so focus is unambiguous
+          if (isContactActive) {
+            if (activeTeamIdxRef.current !== -1 && cachedTeamItems && cachedTeamItems.length > 0) {
+              activeTeamIdxRef.current = -1;
+              for (let i = 0; i < cachedTeamItems.length; i++) {
+                cachedTeamItems[i].setAttribute("data-active", "false");
+              }
+            }
+          } else if (teamCenters.length > 0 && closestTeamIdx !== activeTeamIdxRef.current && cachedTeamItems && cachedTeamItems.length > 0) {
+            activeTeamIdxRef.current = closestTeamIdx;
+            for (let i = 0; i < cachedTeamItems.length; i++) {
+              const item = cachedTeamItems[i];
+              const isActive = i === closestTeamIdx;
+              const cur = item.getAttribute("data-active");
+              if (isActive && cur !== "true") {
+                item.setAttribute("data-active", "true");
+              } else if (!isActive && cur !== "false") {
+                item.setAttribute("data-active", "false");
+              }
             }
           }
         }
       }
 
-      // 2. Team Section: Find closest team column or hero using cached geometry
-      const teamCenters = teamCentersRef.current;
-      let closestTeamIdx = 0;
-      let minTeamDist = Infinity;
-
-      if (teamCenters.length > 0) {
-        if (!cachedTeamItems || cachedTeamItems.length === 0) {
-          cachedTeamItems = Array.from(track.querySelectorAll<HTMLElement>(".gallery-team-item"));
-        }
-
-        for (let i = 0; i < teamCenters.length; i++) {
-          const dist = Math.abs(tx + teamCenters[i] - screenCenter);
-          if (dist < minTeamDist) {
-            minTeamDist = dist;
-            closestTeamIdx = i;
-          }
-        }
-      }
-
-      // 3. Contact Section: Detect when Contact arrives in view or reaches end of track
-      const contactCenter = contactCenterRef.current;
-      let isContactActive = false;
-
-      if (contactCenter > 0) {
-        const distToContact = Math.abs(tx + contactCenter - screenCenter);
-        // Contact is active when it's closer to the screen center than any team item
-        // or within 650px of the screen center
-        isContactActive = distToContact < minTeamDist || distToContact < 650;
-
-        if (isContactActive !== isContactActiveRef.current) {
-          isContactActiveRef.current = isContactActive;
-          if (!cachedContactSection) {
-            cachedContactSection = track.querySelector<HTMLElement>(".gallery-contact-section");
-          }
-          if (cachedContactSection) {
-            cachedContactSection.setAttribute("data-active", isContactActive ? "true" : "false");
-          }
-        }
-      }
-
-      // If Contact is active, deactivate all team items so focus is unambiguous
-      if (isContactActive) {
-        if (activeTeamIdxRef.current !== -1 && cachedTeamItems && cachedTeamItems.length > 0) {
-          activeTeamIdxRef.current = -1;
-          for (let i = 0; i < cachedTeamItems.length; i++) {
-            cachedTeamItems[i].setAttribute("data-active", "false");
-          }
-        }
-      } else if (teamCenters.length > 0 && closestTeamIdx !== activeTeamIdxRef.current && cachedTeamItems && cachedTeamItems.length > 0) {
-        activeTeamIdxRef.current = closestTeamIdx;
-        for (let i = 0; i < cachedTeamItems.length; i++) {
-          const item = cachedTeamItems[i];
-          const isActive = i === closestTeamIdx;
-          const cur = item.getAttribute("data-active");
-          if (isActive && cur !== "true") {
-            item.setAttribute("data-active", "true");
-          } else if (!isActive && cur !== "false") {
-            item.setAttribute("data-active", "false");
-          }
-        }
+      if (performance.now() < activeUntil) {
+        rafId = requestAnimationFrame(updateActiveCards);
       }
     };
 
-    rafId = requestAnimationFrame(updateActiveCards);
-    return () => cancelAnimationFrame(rafId);
+    const wake = () => {
+      activeUntil = performance.now() + 900; // cover Lenis 0.85s inertia window
+      if (!rafId) {
+        rafId = requestAnimationFrame(updateActiveCards);
+      }
+    };
+
+    wake();
+    window.addEventListener("scroll", wake, { passive: true });
+    window.addEventListener("wheel", wake, { passive: true });
+    window.addEventListener("touchmove", wake, { passive: true });
+    window.addEventListener("resize", wake, { passive: true });
+
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      window.removeEventListener("scroll", wake);
+      window.removeEventListener("wheel", wake);
+      window.removeEventListener("touchmove", wake);
+      window.removeEventListener("resize", wake);
+    };
   }, []);
 
   return (

@@ -50,21 +50,21 @@ function DoorAboutOverlay({}: DoorAboutOverlayProps) {
           {/* Level 1: Section Label (Aligned horizontally with right side) */}
           <div className="flex items-center gap-3 h-6 mb-4 sm:mb-5">
             <span className="w-2 h-2 rounded-full bg-[#ee495c] shadow-[0_0_8px_rgba(238,73,92,0.6)]" />
-            <span className="font-mono text-[11px] sm:text-xs font-semibold tracking-[0.22em] uppercase text-[#ee495c] drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
+            <span className="font-mono text-[11px] sm:text-xs font-semibold tracking-[0.22em] uppercase text-[#ee495c] [text-shadow:0_2px_4px_rgba(0,0,0,0.9)]">
               WHO WE ARE
             </span>
             <span className="h-px w-8 bg-white/25" />
           </div>
 
           {/* Level 2: Monumental Editorial Headline */}
-          <h2 className="font-display text-5xl sm:text-6xl lg:text-7xl xl:text-[80px] text-slate-50 tracking-[-0.01em] uppercase leading-[0.90] mb-6 sm:mb-7 drop-shadow-[0_4px_24px_rgba(0,0,0,0.98)]">
+          <h2 className="font-display text-5xl sm:text-6xl lg:text-7xl xl:text-[80px] text-slate-50 tracking-[-0.01em] uppercase leading-[0.90] mb-6 sm:mb-7 [text-shadow:0_4px_24px_rgba(0,0,0,0.98)]">
             A VISION.
             <br />
             <span className="text-[#ee495c]">A MOVEMENT.</span>
           </h2>
 
           {/* Level 3: Short Supporting Editorial Paragraph (High Readability) */}
-          <p className="text-[14px] sm:text-[15px] lg:text-[16px] text-slate-100/90 font-normal leading-[1.75] min-h-[110px] sm:min-h-[115px] mb-8 drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] max-w-[440px]">
+          <p className="text-[14px] sm:text-[15px] lg:text-[16px] text-slate-100/90 font-normal leading-[1.75] min-h-[110px] sm:min-h-[115px] mb-8 [text-shadow:0_2px_10px_rgba(0,0,0,0.95)] max-w-[440px]">
             Founded on 25th July 2025 at Woxsen University, E-Cell is a student-driven catalyst transforming ambition into action, innovation into opportunity, and ideas into ventures.
           </p>
 
@@ -72,18 +72,18 @@ function DoorAboutOverlay({}: DoorAboutOverlayProps) {
           <div className="pt-6 border-t border-white/20 max-w-[440px]">
             <div className="grid grid-cols-2 gap-6">
               <div>
-                <span className="block font-mono text-[10px] sm:text-[11px] font-medium tracking-[0.2em] text-slate-400 uppercase mb-1.5 drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]">
+                <span className="block font-mono text-[10px] sm:text-[11px] font-medium tracking-[0.2em] text-slate-400 uppercase mb-1.5 [text-shadow:0_1px_4px_rgba(0,0,0,0.9)]">
                   COMMUNITY
                 </span>
-                <span className="font-mono text-[13px] sm:text-[14px] text-white font-semibold tracking-wide drop-shadow-[0_2px_6px_rgba(0,0,0,0.95)]">
+                <span className="font-mono text-[13px] sm:text-[14px] text-white font-semibold tracking-wide [text-shadow:0_2px_6px_rgba(0,0,0,0.95)]">
                   6+ Schools Unified
                 </span>
               </div>
               <div>
-                <span className="block font-mono text-[10px] sm:text-[11px] font-medium tracking-[0.2em] text-slate-400 uppercase mb-1.5 drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]">
+                <span className="block font-mono text-[10px] sm:text-[11px] font-medium tracking-[0.2em] text-slate-400 uppercase mb-1.5 [text-shadow:0_1px_4px_rgba(0,0,0,0.9)]">
                   ECOSYSTEM
                 </span>
-                <span className="font-mono text-[13px] sm:text-[14px] text-white font-semibold tracking-wide drop-shadow-[0_2px_6px_rgba(0,0,0,0.95)]">
+                <span className="font-mono text-[13px] sm:text-[14px] text-white font-semibold tracking-wide [text-shadow:0_2px_6px_rgba(0,0,0,0.95)]">
                   Academia × Industry
                 </span>
               </div>
@@ -113,21 +113,21 @@ function DoorAboutOverlay({}: DoorAboutOverlayProps) {
           {/* Level 1: Section Label (Aligned horizontally with right side) */}
           <div className="flex items-center gap-3 h-6 mb-4 sm:mb-5">
             <span className="w-2 h-2 rounded-full bg-[#ee495c] shadow-[0_0_8px_rgba(238,73,92,0.6)]" />
-            <span className="font-mono text-[11px] sm:text-xs font-semibold tracking-[0.22em] uppercase text-[#ee495c] drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
+            <span className="font-mono text-[11px] sm:text-xs font-semibold tracking-[0.22em] uppercase text-[#ee495c] [text-shadow:0_2px_4px_rgba(0,0,0,0.9)]">
               MISSION & PILLARS
             </span>
             <span className="h-px w-8 bg-white/25" />
           </div>
 
           {/* Level 2: Monumental Editorial Headline */}
-          <h2 className="font-display text-5xl sm:text-6xl lg:text-7xl xl:text-[80px] text-slate-50 tracking-[-0.01em] uppercase leading-[0.90] mb-6 sm:mb-7 drop-shadow-[0_4px_24px_rgba(0,0,0,0.98)]">
+          <h2 className="font-display text-5xl sm:text-6xl lg:text-7xl xl:text-[80px] text-slate-50 tracking-[-0.01em] uppercase leading-[0.90] mb-6 sm:mb-7 [text-shadow:0_4px_24px_rgba(0,0,0,0.98)]">
             IGNITING
             <br />
             <span className="text-[#ee495c]">INNOVATION.</span>
           </h2>
 
           {/* Level 3: Short Supporting Mission Statement (High Readability) */}
-          <p className="text-[14px] sm:text-[15px] lg:text-[16px] text-slate-100/90 font-normal leading-[1.75] min-h-[110px] sm:min-h-[115px] mb-8 drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] max-w-[440px]">
+          <p className="text-[14px] sm:text-[15px] lg:text-[16px] text-slate-100/90 font-normal leading-[1.75] min-h-[110px] sm:min-h-[115px] mb-8 [text-shadow:0_2px_10px_rgba(0,0,0,0.95)] max-w-[440px]">
             A thriving entrepreneurial culture built through skills, mentorship, and platforms for students to create.
           </p>
 
@@ -137,11 +137,11 @@ function DoorAboutOverlay({}: DoorAboutOverlayProps) {
               <div>
                 <div className="flex items-baseline gap-2 mb-1">
                   <span className="font-mono text-xs font-bold text-[#ee495c]">01</span>
-                  <span className="font-mono text-[12px] sm:text-[13px] font-bold text-white uppercase tracking-wider drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]">
+                  <span className="font-mono text-[12px] sm:text-[13px] font-bold text-white uppercase tracking-wider [text-shadow:0_1px_4px_rgba(0,0,0,0.9)]">
                     INSPIRE
                   </span>
                 </div>
-                <p className="text-xs text-slate-300/90 leading-normal drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
+                <p className="text-xs text-slate-300/90 leading-normal [text-shadow:0_1px_3px_rgba(0,0,0,0.9)]">
                   Ignite the founder spark.
                 </p>
               </div>
@@ -149,11 +149,11 @@ function DoorAboutOverlay({}: DoorAboutOverlayProps) {
               <div>
                 <div className="flex items-baseline gap-2 mb-1">
                   <span className="font-mono text-xs font-bold text-[#ee495c]">02</span>
-                  <span className="font-mono text-[12px] sm:text-[13px] font-bold text-white uppercase tracking-wider drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]">
+                  <span className="font-mono text-[12px] sm:text-[13px] font-bold text-white uppercase tracking-wider [text-shadow:0_1px_4px_rgba(0,0,0,0.9)]">
                     BUILD
                   </span>
                 </div>
-                <p className="text-xs text-slate-300/90 leading-normal drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
+                <p className="text-xs text-slate-300/90 leading-normal [text-shadow:0_1px_3px_rgba(0,0,0,0.9)]">
                   Provide venture tools.
                 </p>
               </div>
@@ -161,11 +161,11 @@ function DoorAboutOverlay({}: DoorAboutOverlayProps) {
               <div>
                 <div className="flex items-baseline gap-2 mb-1">
                   <span className="font-mono text-xs font-bold text-[#ee495c]">03</span>
-                  <span className="font-mono text-[12px] sm:text-[13px] font-bold text-white uppercase tracking-wider drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]">
+                  <span className="font-mono text-[12px] sm:text-[13px] font-bold text-white uppercase tracking-wider [text-shadow:0_1px_4px_rgba(0,0,0,0.9)]">
                     CONNECT
                   </span>
                 </div>
-                <p className="text-xs text-slate-300/90 leading-normal drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
+                <p className="text-xs text-slate-300/90 leading-normal [text-shadow:0_1px_3px_rgba(0,0,0,0.9)]">
                   Bridge with mentors.
                 </p>
               </div>
@@ -173,11 +173,11 @@ function DoorAboutOverlay({}: DoorAboutOverlayProps) {
               <div>
                 <div className="flex items-baseline gap-2 mb-1">
                   <span className="font-mono text-xs font-bold text-[#ee495c]">04</span>
-                  <span className="font-mono text-[12px] sm:text-[13px] font-bold text-white uppercase tracking-wider drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]">
+                  <span className="font-mono text-[12px] sm:text-[13px] font-bold text-white uppercase tracking-wider [text-shadow:0_1px_4px_rgba(0,0,0,0.9)]">
                     CATALYSE
                   </span>
                 </div>
-                <p className="text-xs text-slate-300/90 leading-normal drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
+                <p className="text-xs text-slate-300/90 leading-normal [text-shadow:0_1px_3px_rgba(0,0,0,0.9)]">
                   Turn ideas into impact.
                 </p>
               </div>
